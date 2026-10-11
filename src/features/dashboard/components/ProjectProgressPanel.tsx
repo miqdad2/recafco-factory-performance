@@ -15,7 +15,7 @@ export function ProjectProgressPanel({ projects }: { projects: ProjectProgress[]
           Progress basis: {basis}.
         </p>
       )}
-      <ul aria-describedby={basis ? basisId : undefined} className="grid flex-1 grid-cols-1 content-around gap-x-10 gap-y-6 md:grid-cols-2">
+      <ul aria-describedby={basis ? basisId : undefined} className="grid flex-1 grid-cols-1 content-around gap-x-10 gap-y-4 md:grid-cols-2">
         {projects.map((p) => (
           <li key={p.code} className="min-w-0">
             {/* Code on its own line so long names never push it into an uneven wrap. */}
@@ -24,9 +24,9 @@ export function ProjectProgressPanel({ projects }: { projects: ProjectProgress[]
                 <p className="text-label font-semibold text-ink">{p.name}</p>
                 <p className="text-support font-medium text-ink-muted">{p.code}</p>
               </div>
-              <p className="text-[1.75rem] leading-tight font-bold text-ink">{formatWholePercent(p.percentComplete)}</p>
+              <p className="text-[2rem] leading-none font-bold tracking-tight text-ink">{formatWholePercent(p.percentComplete)}</p>
             </div>
-            <div className="mt-2">
+            <div className="mt-2.5">
               <ProgressBar percent={p.percentComplete} colorClass="bg-chart-blue" label={`${p.name} delivery progress`} />
             </div>
           </li>

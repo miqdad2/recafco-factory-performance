@@ -6,7 +6,7 @@ import { DashboardHeader } from './DashboardHeader';
 import { DashboardLayout } from './DashboardLayout';
 import { PeriodControls } from './PeriodControls';
 
-const CARD_TITLES = ['Open Sales Orders', 'Active Production Orders', 'Concrete Produced', 'Delivered Output'];
+const CARD_TITLES = ['Current Sales Orders', 'Active Production Orders', 'Concrete Produced', 'Delivered Output'];
 
 /** Solid, static block standing in for a figure. Never shows a number. */
 function Block({ className }: { className: string }) {

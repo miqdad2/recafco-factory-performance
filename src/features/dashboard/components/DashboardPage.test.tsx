@@ -116,7 +116,7 @@ function expectShowing(period: Period) {
 /** Figures that must never change with the period. */
 function snapshotFigures() {
   return {
-    open: within(card('Open Sales Orders')).getAllByText(/\d/).map((n) => n.textContent),
+    open: within(card('Current Sales Orders')).getAllByText(/\d/).map((n) => n.textContent),
     active: within(card('Active Production Orders')).getAllByText(/\d/).map((n) => n.textContent),
     capacity: screen.getByRole('heading', { name: 'Monthly Plant Capacity' }).closest('section')!.textContent,
     projects: screen.getByRole('heading', { name: 'Active Projects' }).closest('section')!.textContent,
@@ -290,11 +290,11 @@ describe('keyboard and announcements', () => {
 describe('demo date wording', () => {
   it('labels order cards as a dated demo snapshot and never calls demo figures "today" or "now"', async () => {
     const fake = await renderDashboard();
-    for (const title of ['Open Sales Orders', 'Active Production Orders']) {
+    for (const title of ['Current Sales Orders', 'Active Production Orders']) {
       expect(within(card(title)).getByText('Demo snapshot')).toBeTruthy();
-      expect(within(card(title)).getByText('Wed 14 Oct, 14:00')).toBeTruthy();
+      expect(within(card(title)).getByText('Wed 14 Oct, 2:00 PM')).toBeTruthy();
     }
-    expect(screen.getByText(/^Demo reference time:/).textContent).toContain('Wed 14 Oct 2026, 14:00');
+    expect(screen.getByText(/^Demo reference time:/).textContent).toContain('Wed 14 Oct 2026, 2:00 PM');
     expect(screen.getByText(/^Last successful demo load:/)).toBeTruthy();
 
     for (const next of ['weekly', 'monthly', 'yearly', 'daily'] as const) {

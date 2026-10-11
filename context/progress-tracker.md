@@ -58,7 +58,7 @@ Acceptance criteria used: the tracker defined Unit 2 only as a scope line. The u
 ### Unit 3: working period controls (11 Oct 2026)
 **Acceptance criteria.** All pass; evidence is under Verification status.
 1. Daily, Weekly, Monthly and Yearly are enabled. Each selection updates the range, Concrete Produced, Delivered Output, delivery note count, trend, grade breakdown and period labels.
-2. These stay identical across selections: Open Sales Orders, Active Production Orders, Monthly Batch Plant Capacity, project progress, and the demo reference timestamp.
+2. These stay identical across selections: Current Sales Orders, Active Production Orders, Monthly Batch Plant Capacity, project progress, and the demo reference timestamp.
 3. While another period loads, the last successful view stays visible with its own labels, and "Loading <Period>…" is shown.
 4. Figures, range and labels change together, and only after the new snapshot passes validation. Old figures never appear under a new label.
 5. Rapid selections: only the latest request can be displayed. Obsolete requests are cancelled, and late responses do not replace newer selections.
@@ -138,6 +138,38 @@ No calculations, records, provider, period logic or request handling changed. No
     - All four periods at 1366×768: no horizontal overflow; vertical scroll only.
     - Keyboard: Tab, Enter and Space work and focus stays put.
     - Temporary over-capacity (3,000 m³) and unknown-capacity fixtures checked in the new gauge layout, then restored (no TEMP markers; rebuilt).
+
+### Management presentation design (11 Oct 2026, separate from Unit 4)
+No calculations, records, provider, period switching, loading or error behaviour changed. No new metrics.
+- **Header:**
+  - Logo proportions kept on a white tile, plus a divider and the title "Factory Performance" at 40 px extra-bold.
+  - Amber-tinted Demo data badge.
+  - Clock labelled "Current time", 12-hour with uppercase AM/PM, plus the date; the word "Kuwait" removed. Asia/Kuwait is still used internally.
+- **12-hour time everywhere visible:** `formatKuwaitTime` now builds "1:05 PM" from Kuwait civil time (midnight "12:00 AM", noon "12:00 PM"); `formatKuwaitHour` gives axis labels like "6 AM". This applies to snapshot, footer and legend times.
+- **KPI cards:**
+  - 76 px figures, 64 px for values longer than 6 characters, with bottom-aligned figure rows and 28 px units.
+  - Slate strip for demo snapshots, blue for period output; "Volume produced" caption removed.
+  - Panel depth via `--shadow-panel`.
+- **Trend:**
+  - Lighter-blue emphasis on the interval containing the demo reference time (Weekly selected day, Monthly selected day, Yearly current month), with a legend.
+  - Monthly prints only the highest bar's value; the selected-day and highest-day sentences sit under the chart.
+  - Grey zero marks kept. Wider bars, more top spacing, softer gridlines.
+- **Capacity:** figures back beneath the gauge in three aligned columns; thinner arc and larger percentage text that clears the arc; over-capacity caption shortened to "over capacity". Turquoise stays neutral. The unused `wall` CSS variant was removed.
+- **Lower panels:** grade bars switched from turquoise to production blue; project percentage 32 px and progress bar 16 px.
+- **Card title:** "Current Sales Orders" — this rename was applied across code, tests and context docs, apparently by the user, and was kept as is.
+- **Motion:** ECharts, control and progress transitions only, all respecting reduced motion. A KPI fade-in was tried and removed because headless rendering left it at low opacity.
+- **Tests:** 83 pass (6 new):
+  - 4 for 12-hour formatting, including midnight, noon, timezone independence and axis hours.
+  - Chart label rules rewritten for emphasis and the legend (7 tests).
+  - Existing tests updated for "2:00 PM" times.
+- Type check, lint and build pass with no chunk warning (282.9 kB compressed JS).
+- **Browser checks** (headless Edge via DevTools protocol):
+  - 1920×1080, all four periods: no scroll, no horizontal overflow, no spill, no overlapping or truncated labels in reviewed screenshots.
+  - 3840×2160 matches 1080p at 2× scale.
+  - 1366×768, all four periods: no horizontal overflow (vertical scroll only; the title wraps to two lines there).
+  - Loading, pending, failed selection, unknown capacity and over-capacity (temporary fixtures, restored) all keep the layout.
+  - Keyboard: Tab, Enter and Space work, focus stays put, and the focus ring is visible.
+- **Screenshots:** `docs/screenshots/before/` (pre-change) and `docs/screenshots/after/` (final; 12 images), plus `docs/screenshots/daily-1920x1080.png` (updated).
 
 ## In progress
 None.
@@ -309,6 +341,7 @@ The supporting screenshots are references, not validated data mappings.
 Historical production figures refer to 25 June 2026; do not present them as current data.
 Work can proceed on the demo while SAP questions are unresolved.
 The starter package now uses React + Vite throughout. Do not follow the earlier Next.js scaffolding prompt.
+11 Oct 2026: management presentation design completed (12-hour clock, header, KPI hierarchy, trend emphasis, capacity layout, colour roles); not pushed or deployed, awaiting user review.
 11 Oct 2026: presentation polish completed (wording, readability, capacity, projects, chart clutter, footer); recorded separately from Unit 4.
 11 Oct 2026: Unit 3 built. All four period controls work; explicit acceptance criteria were recorded above, and all pass.
 11 Oct 2026: Unit 2 built. Demo data now comes from seeded records via the async demo provider and TanStack Query. The tracker's Unit 2 scope line had no formal acceptance list; the user's brief served as the criteria.

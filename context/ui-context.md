@@ -42,7 +42,7 @@ Proposed 1920×1080 fullscreen baseline:
 | Supporting text | 20–22 px |
 | Period button | 22–24 px |
 
-Implemented (after presentation polish): chart axes, bar values and status line 22 px; captions, panel notes, legends and footer 20 px; nothing essential below 20 px at 1080p. KPI figures remain 64 px and the capacity percentage about 60 px.
+Implemented (management presentation design): KPI figures 76 px, stepping down to 64 px for values longer than 6 characters (e.g. "66,197.9"); units 28 px; screen title 40 px extra-bold; panel titles 26 px; chart axes, bar values and status line 22 px; captions, panel notes, legends and footer 20 px. The capacity percentage scales with the gauge (about 55–60 px at 1080p). Numerals are tabular.
 
 Scale deliberately for 4K; do not keep 1080p text sizes on a 4K canvas.
 Never shrink everything to force excess content into the screen.
@@ -51,7 +51,7 @@ Actual panel dimensions and viewing distance must inform final sizing.
 ## Layout
 - One overview page with no sidebar; no routing library required for the initial scope.
 - Header: logo/title on left; period buttons centrally/right; date/time and fullscreen.
-- Four headline cards: Open Sales Orders, Active Production Orders, Concrete Produced, Delivered Output.
+- Four headline cards: Current Sales Orders, Active Production Orders, Concrete Produced, Delivered Output.
 - Middle: production trend spans approximately two thirds; capacity panel one third.
 - Bottom: grade breakdown and four selected project progress rows.
 - Footer: source label, data timestamp and refresh status.
@@ -66,15 +66,17 @@ Trend: readable bars/line, restrained gridlines, explicit m³ axis/unit and sens
 - The panel header shows the period total.
 - Daily, Weekly and Yearly print a whole-m³ value on every productive bar.
 - Zero-output intervals: no "0" label. They are drawn as a short grey baseline mark, explained by a "No production" legend, and stay distinct from the shaded "Not yet reached" area.
-- Monthly (28–31 bars): no bar labels. The highest day (teal) and the selected day (violet) get their own colour plus a sentence under the chart, e.g. "Selected day, to 14:00: Wed 14 Oct · 152.3 m³".
+- Monthly (28–31 bars): only the highest bar carries a number (nothing taller beside it can collide). The selected day is drawn in a lighter blue and both days are described under the chart, e.g. "Selected day, to 2:00 PM: Wed 14 Oct · 152.3 m³" and "Highest day: Sun 11 Oct · 362.7 m³".
+- The interval containing the demo reference time is drawn in a lighter blue (`--chart-blue-emphasis`) and named in the legend: Weekly "Selected day, to 2:00 PM"; Yearly "October 2026, to Wed 14 Oct"; Daily "Current hour, to …" only when that hour is partly elapsed.
+- Hourly axis labels use the 12-hour form "6 AM".
 - Axis labels: every other hour or day for Daily and Monthly, all labels otherwise. The y-axis uses about 3 gridlines.
 - Axis labels, bar values and the y-axis unit are 22 px at the 1080p baseline.
 Monthly capacity: large semicircle or clean progress visual; show actual / capacity m³ and percentage. Implemented:
 - Inline SVG semicircle; the arc stops at 100% while the printed percentage keeps the true value.
 - Title "Monthly Plant Capacity", the month on the right, and the subtitle "Concrete batch plant · illustrative".
-- On full wallboard screens (the `wall` variant) actual output, capacity and remaining sit in a column beside a larger gauge (percentage about 60 px at 1080p). Smaller screens stack them below.
+- The gauge takes all spare height; actual output, capacity and remaining sit in three aligned columns beneath it. Turquoise is neutral, with no good/bad colouring until business thresholds are agreed.
 - Unknown capacity: "Not available", "capacity not set", and "Not set" with no unit.
-- Over capacity: full arc, "over monthly capacity", and "Above capacity".
+- Over capacity: full arc, "over capacity", and "Above capacity".
 Grade mix: horizontal bars with grade names and values; group remaining minor grades as Other if necessary.
 Projects: four names, codes as secondary text, percentages and progress bars. Implemented:
 - Panel note "Delivery progress · demo"; each code sits on its own line under the name.
@@ -82,12 +84,38 @@ Projects: four names, codes as secondary text, percentages and progress bars. Im
 - The calculation basis (delivered pieces ÷ planned pieces) is supplementary screen-reader text and is documented in `src/lib/dashboard/fixtures/README.md`.
 
 ## Demo date wording (presentation polish, 11 Oct 2026)
-The demo reference date (Wed 14 Oct 2026, 14:00) differs from the live Kuwait date. Wording must never suggest sample figures describe the real current day:
+The demo reference date (Wed 14 Oct 2026, 2:00 PM) differs from the live Kuwait date. Wording must never suggest sample figures describe the real current day:
 - Period cards and panels say "Selected day / week / month / year", never "Today / This week".
-- Order cards say "Demo snapshot" with the snapshot date and time ("Wed 14 Oct, 14:00"), never "Now".
+- Order cards say "Demo snapshot" with the snapshot date and time ("Wed 14 Oct, 2:00 PM"), never "Now".
 - Chart summaries say "Selected day", never "today".
 - The footer separates "Demo data · SAP not connected", "Demo reference time: …" and "Last successful demo load: …". The live clock stays in the header, alone.
 - Card chips use sentence case so the chip and its caption fit on one line at 1080p.
+
+## Management presentation design (11 Oct 2026)
+- **Header:**
+  - Official logo on a white tile, a thin divider, and "Factory Performance" at 40 px extra-bold.
+  - Period controls centred, with the "Showing <range>" status beneath.
+  - Amber "Demo data" badge.
+  - Live clock labelled "Current time", 12-hour ("1:05 PM"), with the date; "Kuwait" is not shown, but all times use Asia/Kuwait internally.
+- **Time format:** every visible time uses the 12-hour form with uppercase AM/PM: clock, snapshot ("Wed 14 Oct, 2:00 PM"), footer timestamps and Monthly legend. Midnight shows "12:00 AM" and noon "12:00 PM". Formatting comes from Kuwait civil time, so it is identical in every browser.
+- **KPI cards:**
+  - A fixed-height figure row bottom-aligns numbers and units across cards.
+  - Thin accent strip: slate (`--accent-snapshot`) for demo-snapshot cards, blue for period output.
+  - The redundant "Volume produced" caption was removed.
+- **Colour roles:**
+  - RECAFCO red: selected controls.
+  - Blue: production bars, grade bars, project progress.
+  - Light blue: the in-progress (selected-day / current-month) bar.
+  - Turquoise: capacity only.
+  - Amber: demo/warning.
+  - Slate: snapshot strip.
+  - Teal and violet are no longer used in the trend.
+- **Depth:** panels and cards use `--shadow-panel` (faint top highlight plus soft drop shadow) with the existing border.
+- **Projects:** percentage 32 px bold, bar 16 px tall in production blue, code on its own line.
+- **Motion:**
+  - ECharts bar transitions (300 ms), control colour transitions (200 ms), and progress-bar width transitions (300 ms), all disabled under reduced motion.
+  - Numbers never animate through intermediate values.
+  - A KPI fade-in was tried and removed: headless rendering froze it at low opacity, an unacceptable risk on a 24/7 wallboard.
 No 3D/perspective charts, arbitrary decorative rings or unlabeled shapes.
 No hover dependence; supplementary tooltips are allowed.
 Future/unavailable data is distinct from a real zero.

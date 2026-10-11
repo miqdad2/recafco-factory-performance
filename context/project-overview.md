@@ -56,7 +56,7 @@ Use the manufacturing composition, green reference's clarity and black/gold refe
 ## Core metrics
 | Metric | Definition for demo | Time behaviour |
 | --- | --- | --- |
-| Open Sales Orders | Distinct non-cancelled orders with an unfulfilled quantity; fixture status rules documented | Current snapshot |
+| Current Sales Orders | Distinct non-cancelled orders with an unfulfilled quantity; fixture status rules documented | Current snapshot |
 | Active Production Orders | Distinct released, not closed/cancelled orders with remaining work | Current snapshot |
 | Concrete Produced | Sum of fixture concrete output in m³ | Selected period |
 | Delivered Output | Sum of delivered precast pieces for the first demo; always labelled pieces | Selected period |

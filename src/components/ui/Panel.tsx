@@ -16,7 +16,7 @@ export function Panel({ title, meta, subtitle, className = '', children }: Panel
   return (
     <section
       aria-labelledby={titleId}
-      className={`flex min-h-0 min-w-0 flex-1 flex-col rounded-panel border border-line bg-surface p-6 ${className}`}
+      className={`flex min-h-0 min-w-0 flex-1 flex-col rounded-panel border border-line bg-surface p-6 shadow-panel ${className}`}
     >
       <header>
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">

@@ -12,7 +12,7 @@ export function KpiCards({ snapshot }: { snapshot: DashboardSnapshot }) {
   return (
     <>
       <KpiCard
-        label="Open Sales Orders"
+        label="Current Sales Orders"
         value={formatCount(orders.openSalesOrders)}
         unit="orders"
         scope={SNAPSHOT_SCOPE}
@@ -33,7 +33,6 @@ export function KpiCards({ snapshot }: { snapshot: DashboardSnapshot }) {
         unit="m³"
         scope={periodScope}
         scopeKind="period"
-        caption="Volume produced"
       />
       <KpiCard
         label="Delivered Output"

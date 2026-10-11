@@ -1,12 +1,7 @@
 /** Single place for Asia/Kuwait date formatting. All display times use this zone. */
-export const KUWAIT_TIME_ZONE = 'Asia/Kuwait';
+import { toKuwaitCivil } from './dashboard/periods';
 
-const timeFormat = new Intl.DateTimeFormat('en-GB', {
-  timeZone: KUWAIT_TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
+export const KUWAIT_TIME_ZONE = 'Asia/Kuwait';
 
 const longDateFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: KUWAIT_TIME_ZONE,
@@ -39,8 +34,25 @@ const yearFormat = new Intl.DateTimeFormat('en-GB', { timeZone: KUWAIT_TIME_ZONE
 type DateInput = Date | string;
 const toDate = (value: DateInput) => (typeof value === 'string' ? new Date(value) : value);
 
-/** "14:05" */
-export const formatKuwaitTime = (value: DateInput) => timeFormat.format(toDate(value));
+/** 12-hour clock parts in Kuwait time: 0 → 12 AM, 12 → 12 PM. */
+function kuwaitHour12(value: DateInput) {
+  const { hour, minute } = toKuwaitCivil(toDate(value).getTime());
+  return { hour12: hour % 12 === 0 ? 12 : hour % 12, minute, meridiem: hour < 12 ? 'AM' : 'PM' };
+}
+
+/**
+ * "1:05 PM", "12:00 AM" (midnight), "12:00 PM" (noon). Built from Kuwait civil time
+ * rather than locale output, so the format is identical on every browser.
+ */
+export const formatKuwaitTime = (value: DateInput) => {
+  const { hour12, minute, meridiem } = kuwaitHour12(value);
+  return `${hour12}:${String(minute).padStart(2, '0')} ${meridiem}`;
+};
+/** "6 AM" — hour only, for chart axes. */
+export const formatKuwaitHour = (value: DateInput) => {
+  const { hour12, meridiem } = kuwaitHour12(value);
+  return `${hour12} ${meridiem}`;
+};
 /** "Sunday 11 October 2026" */
 export const formatKuwaitLongDate = (value: DateInput) =>
   longDateFormat.format(toDate(value)).replace(',', '');

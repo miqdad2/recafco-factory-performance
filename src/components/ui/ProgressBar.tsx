@@ -15,7 +15,7 @@ export function ProgressBar({ percent, colorClass, label }: ProgressBarProps) {
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(width)}
-      className="h-[0.875rem] w-full overflow-hidden rounded-full bg-raised"
+      className="h-[1rem] w-full overflow-hidden rounded-full bg-raised"
     >
       <div
         className={`h-full rounded-full ${colorClass} motion-safe:transition-[width] motion-safe:duration-300`}

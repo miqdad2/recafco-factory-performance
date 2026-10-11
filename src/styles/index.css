@@ -9,6 +9,8 @@
   --text-secondary: #c0cddc;
   --accent-primary: #e34a55;
   --chart-blue: #6bafff;
+  --chart-blue-emphasis: #b8d9ff; /* selected day / current interval on the trend */
+  --accent-snapshot: #8da2b8; /* neutral strip for demo-snapshot cards */
   --chart-teal: #50d4c1;
   --chart-violet: #baa1ff;
   --border-default: #334c66;
@@ -36,9 +38,6 @@
   }
 }
 
-/* Full wallboard viewports (the complement of `compact`): everything fits one screen. */
-@custom-variant wall (@media (min-width: 1560px) and (min-height: 878px));
-
 @theme inline {
   --color-base: var(--bg-base);
   --color-surface: var(--bg-surface);
@@ -47,6 +46,8 @@
   --color-ink-muted: var(--text-secondary);
   --color-accent: var(--accent-primary);
   --color-chart-blue: var(--chart-blue);
+  --color-chart-blue-emphasis: var(--chart-blue-emphasis);
+  --color-accent-snapshot: var(--accent-snapshot);
   --color-chart-teal: var(--chart-teal);
   --color-chart-violet: var(--chart-violet);
   --color-line: var(--border-default);
@@ -61,8 +62,10 @@
   /* Type scale at the 1920×1080 baseline (1rem = 16px). */
   --text-title: 2.25rem; /* 36px screen title */
   --text-title--line-height: 1.1;
-  --text-kpi: 4rem; /* 64px headline figures */
+  --text-kpi: 4.75rem; /* 76px headline figures */
   --text-kpi--line-height: 1;
+  --text-kpi-long: 4rem; /* 64px for long values such as "66,197.9" */
+  --text-kpi-long--line-height: 1;
   --text-capacity: 4.5rem; /* 72px capacity percentage */
   --text-capacity--line-height: 1;
   --text-panel: 1.625rem; /* 26px card/panel titles */
@@ -74,6 +77,9 @@
 
   --radius-panel: 1.25rem;
   --radius-control: 0.875rem;
+
+  /* Subtle depth: a faint top highlight and a soft drop shadow separate panels from the page. */
+  --shadow-panel: inset 0 1px 0 0 rgb(255 255 255 / 0.05), 0 0.75rem 1.5rem -0.75rem rgb(0 0 0 / 0.55);
 }
 
 @layer base {

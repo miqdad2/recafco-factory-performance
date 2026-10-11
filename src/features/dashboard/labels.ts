@@ -3,6 +3,7 @@ import { isDashboardDataError } from '../../lib/dashboard/errors';
 import {
   formatKuwaitDayMonth,
   formatKuwaitDayOfMonth,
+  formatKuwaitHour,
   formatKuwaitMonthYear,
   formatKuwaitShortDate,
   formatKuwaitShortMonth,
@@ -46,7 +47,7 @@ export const DELIVERED_UNIT_LABELS: Record<DeliveredUnit, string> = {
 
 /** Axis label for one trend bucket. */
 export function formatBucketLabel(startIso: string, granularity: BucketGranularity, period: Period): string {
-  if (granularity === 'hour') return formatKuwaitTime(startIso);
+  if (granularity === 'hour') return formatKuwaitHour(startIso);
   if (granularity === 'month') return formatKuwaitShortMonth(startIso);
   return period === 'weekly' ? formatKuwaitWeekdayDay(startIso) : formatKuwaitDayOfMonth(startIso);
 }

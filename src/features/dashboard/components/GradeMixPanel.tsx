@@ -17,7 +17,7 @@ export function GradeMixPanel({ grades, total, period }: GradeMixPanelProps) {
     <Panel title="Production by Concrete Grade" meta={`${PERIOD_SCOPES[period]} · m³`}>
       <ul
         aria-label={`Total ${formatVolume(total)} cubic metres`}
-        className="flex flex-1 flex-col justify-around gap-2"
+        className="flex flex-1 flex-col justify-around gap-1.5"
       >
         {grades.map((g) => (
           // Columns fit "Other grades" and Yearly figures such as "21,594.2 m³".
@@ -25,7 +25,7 @@ export function GradeMixPanel({ grades, total, period }: GradeMixPanelProps) {
             <span className="text-label font-semibold text-ink">{g.grade}</span>
             <span className="h-[1.375rem] overflow-hidden rounded-md bg-raised">
               <span
-                className="block h-full rounded-md bg-chart-teal motion-safe:transition-[width] motion-safe:duration-300"
+                className="block h-full rounded-md bg-chart-blue motion-safe:transition-[width] motion-safe:duration-300"
                 style={{ width: largest > 0 ? `${(g.volume / largest) * 100}%` : '0%' }}
               />
             </span>
