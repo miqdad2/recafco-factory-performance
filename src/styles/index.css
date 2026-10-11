@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+
+/* Proposed demo palette (context/ui-context.md). Brand red awaits verification against the official logo. */
+:root {
+  --bg-base: #081321;
+  --bg-surface: #122236;
+  --bg-raised: #1a3048;
+  --text-primary: #f7faff;
+  --text-secondary: #c0cddc;
+  --accent-primary: #e34a55;
+  --chart-blue: #6bafff;
+  --chart-teal: #50d4c1;
+  --chart-violet: #baa1ff;
+  --border-default: #334c66;
+  --state-error: #ff929a;
+  --state-warning: #ffd181;
+  --state-success: #64dbb0;
+
+  color-scheme: dark;
+
+  /*
+   * Display scaling: 1rem = 16px on a 1920×1080 viewport, 32px on 3840×2160.
+   * Scales by whichever of width/height is tighter so the wallboard fits;
+   * never below 13px so smaller screens stay readable (they may scroll).
+   */
+  font-size: clamp(13px, min(0.8333vw, 1.4815vh), 40px);
+}
+
+/* Viewports where the root size is held at its 13px minimum; the page scrolls instead of squeezing. */
+@custom-variant compact {
+  @media (max-width: 1559px) {
+    @slot;
+  }
+  @media (max-height: 877px) {
+    @slot;
+  }
+}
+
+/* Full wallboard viewports (the complement of `compact`): everything fits one screen. */
+@custom-variant wall (@media (min-width: 1560px) and (min-height: 878px));
+
+@theme inline {
+  --color-base: var(--bg-base);
+  --color-surface: var(--bg-surface);
+  --color-raised: var(--bg-raised);
+  --color-ink: var(--text-primary);
+  --color-ink-muted: var(--text-secondary);
+  --color-accent: var(--accent-primary);
+  --color-chart-blue: var(--chart-blue);
+  --color-chart-teal: var(--chart-teal);
+  --color-chart-violet: var(--chart-violet);
+  --color-line: var(--border-default);
+  --color-error: var(--state-error);
+  --color-warning: var(--state-warning);
+  --color-success: var(--state-success);
+}
+
+@theme {
+  --font-sans: 'Inter Variable', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+
+  /* Type scale at the 1920×1080 baseline (1rem = 16px). */
+  --text-title: 2.25rem; /* 36px screen title */
+  --text-title--line-height: 1.1;
+  --text-kpi: 4rem; /* 64px headline figures */
+  --text-kpi--line-height: 1;
+  --text-capacity: 4.5rem; /* 72px capacity percentage */
+  --text-capacity--line-height: 1;
+  --text-panel: 1.625rem; /* 26px card/panel titles */
+  --text-panel--line-height: 1.2;
+  --text-label: 1.375rem; /* 22px chart labels, project names, period buttons */
+  --text-label--line-height: 1.3;
+  --text-support: 1.25rem; /* 20px supporting text */
+  --text-support--line-height: 1.35;
+
+  --radius-panel: 1.25rem;
+  --radius-control: 0.875rem;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+}
+
+/* Unlayered so no utility can weaken it: a thick white ring, visible on red and navy. */
+:focus-visible {
+  outline: 0.25rem solid var(--text-primary);
+  outline-offset: 0.1875rem;
+}
