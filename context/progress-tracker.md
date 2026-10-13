@@ -171,6 +171,49 @@ No calculations, records, provider, period switching, loading or error behaviour
   - Keyboard: Tab, Enter and Space work, focus stays put, and the focus ring is visible.
 - **Screenshots:** `docs/screenshots/before/` (pre-change) and `docs/screenshots/after/` (final; 12 images), plus `docs/screenshots/daily-1920x1080.png` (updated).
 
+### Element production and product categories (12 Oct 2026, separate from Unit 4)
+The KPIs now count finished elements instead of concrete volume. Design, period controls, async provider, loading/error behaviour and the 12-hour clock are unchanged.
+- **Revised KPI definitions** (demo; SAP mapping pending):
+  - **Produced Elements:** whole pieces on completed element-production records in the selected period. Not derived from concrete volume; the previous 152.3 m³ was not relabelled.
+  - **Delivered Element:** pieces on completed delivery notes (unchanged source), with the delivery-note count shown separately.
+  - **Production Trend:** produced pieces per hour, day or month (same grouping as before). Future intervals and elapsed zero-production intervals stay distinct.
+  - **Production by Product:** pieces per demo category: Hollowcore, Precast and GRC. Categories are mutually exclusive and every category is always listed exactly once. Concrete grades were removed from the screen.
+  - **Monthly Plant Capacity:** batching-plant concrete m³ against the illustrative 9,000 m³ plan (unchanged values), labelled "Batching plant · concrete m³ · illustrative".
+- **Contracts** (`contracts.ts`):
+  - New `elementRecords` (category plus positive integer pieces) and renamed `concreteBatches` (m³).
+  - Snapshot `output.elements` (integer total, `pieces` trend, `products`) replaces `output.concrete`.
+  - Validation rejects fractional counts, totals that don't reconcile, and duplicate or missing categories.
+- **Calculations** (`aggregate.ts`): one integer bucketing function serves pieces and litres. `piecesByProduct` always returns all three categories. Grade grouping was removed.
+- **Fixtures:**
+  - Element records come from a separate seed (`DEMO_ELEMENT_SEED`), so deliveries, orders, projects and capacity are unchanged.
+  - Rates were tuned so production exceeds deliveries in every period.
+  - Assumptions and pending SAP questions are in `fixtures/README.md`.
+- **Figures at the reference time:**
+
+  | Period | Produced | Hollowcore / Precast / GRC | Delivered |
+  |---|---|---|---|
+  | Daily | 50 | 27 / 17 / 6 | 21 |
+  | Weekly | 308 | 175 / 94 / 39 | 207 |
+  | Monthly | 881 | 513 / 271 / 97 | 723 |
+  | Yearly | 17,269 | 9,849 / 5,594 / 1,826 | 15,491 |
+
+  Capacity: 3,406.8 m³ (37.9%).
+- **UI:**
+  - `ProductMixPanel` replaces `GradeMixPanel` (removed).
+  - The trend panel uses a "pieces" axis with whole-number ticks, piece tooltips and legend, and a total in pieces.
+  - Placeholder titles updated.
+- **Tests:** 96 pass (13 new), covering:
+  - Element totals matching the trend and product totals in all periods.
+  - Category exclusivity, including a duplicated category being rejected.
+  - Pieces kept separate from batching-plant m³, and no elements inferred from concrete.
+  - Deliveries not derived from production.
+  - Fractional, zero and uncategorised element records, and fractional snapshot counts, being rejected.
+  - Production ≥ deliveries in the dataset.
+  - All existing boundary, switching, cancellation and recovery tests still pass.
+- Type check, lint and build pass with no chunk warning.
+- **Browser** (headless Edge, `vite preview`): all four periods at 1920×1080 show no scroll, overflow or spill, with integer counts, readable product labels, and m³ only in the capacity panel. At 1366×768 there is no horizontal overflow. Keyboard walkthrough passes.
+- **Screenshots:** `docs/screenshots/elements/` and the updated `docs/screenshots/daily-1920x1080.png`.
+
 ## In progress
 None.
 
@@ -232,7 +275,11 @@ These can be changed without implying prior management approval.
 - Final title and management's preferred panel priority?
 
 ### Business definitions
-- What do Day T.VOL and Day P.VOL mean? Which is the official concrete output measure?
+- What do Day T.VOL and Day P.VOL mean? Which is the official batching-plant concrete output measure?
+- Which SAP item groups, item codes or UDFs map items to Hollowcore, Precast and GRC? Can any item belong to more than one category?
+- Which SAP document marks a finished element as completed (receipt from production, production order completion or a custom report), and which timestamp should be used?
+- Should produced-element counts include rejected or reworked pieces?
+- Is "Delivered Element" the agreed final wording (singular), or should it read "Delivered Elements"?
 - How are existing cockpit card values calculated and filtered?
 - Which sales order lines/statuses constitute outstanding factory demand?
 - Which SAP production statuses and remaining-quantity rules define active orders?

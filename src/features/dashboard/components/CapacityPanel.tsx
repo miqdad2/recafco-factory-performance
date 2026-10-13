@@ -37,7 +37,7 @@ export function CapacityPanel({ capacity }: { capacity: MonthlyCapacity }) {
     <Panel
       title="Monthly Plant Capacity"
       meta={formatMonth(capacity.month)}
-      subtitle={`Concrete batch plant${capacity.basis === 'illustrative-demo' ? ' · illustrative' : ''}`}
+      subtitle={`Batching plant · concrete m³${capacity.basis === 'illustrative-demo' ? ' · illustrative' : ''}`}
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="h-[14rem] min-w-0 lg:h-auto lg:min-h-[8rem] lg:flex-1">

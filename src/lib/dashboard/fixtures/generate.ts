@@ -2,11 +2,21 @@
  * Deterministic generators for the demo dataset. Same seed → same records.
  * No record is ever dated at or after the reference time (no fake future output).
  */
-import type { DeliveryNote, DemoDataset, ProductionOrder, ProductionRecord, SalesOrder } from '../contracts';
+import {
+  PRODUCT_CATEGORIES,
+  type ConcreteBatchRecord,
+  type DeliveryNote,
+  type DemoDataset,
+  type ElementProductionRecord,
+  type ProductionOrder,
+  type SalesOrder,
+} from '../contracts';
 import { kuwaitInstant, parseInstant, toKuwaitCivil, toKuwaitIso } from '../periods';
 import {
   DEMO_CAPACITY_PLANS,
   DEMO_DATASET_START,
+  DEMO_ELEMENT_HOURLY_RATE,
+  DEMO_ELEMENT_SEED,
   DEMO_GRADES,
   DEMO_ITEMS,
   DEMO_PROJECT_DELIVERY_WEIGHTS,
@@ -20,7 +30,11 @@ const MINUTE_MS = 60_000;
 const FRIDAY = 5;
 const SATURDAY = 6;
 
-/** Typical hourly output (m³) for a full working day. Hours 02–04 are never scheduled. */
+/**
+ * Typical hourly batching-plant output (m³) for a full working day; also used,
+ * scaled to a 0–1 shift intensity, for finished-element completions.
+ * Hours 02–04 are never scheduled.
+ */
 const WEEKDAY_HOURLY_BASE: Record<number, number> = {
   0: 5, 1: 4, 5: 6, 6: 16, 7: 22, 8: 24, 9: 25, 10: 24, 11: 22, 12: 12,
   13: 21, 14: 22, 15: 22, 16: 21, 17: 20, 18: 17, 19: 16, 20: 15, 21: 13, 22: 6, 23: 5,
@@ -47,8 +61,59 @@ function seasonalFactor(month: number): number {
   return factors[month - 1] ?? 1;
 }
 
-function generateProduction(random: Random, referenceMs: number): ProductionRecord[] {
-  const records: ProductionRecord[] = [];
+/** Whole-number count with the given mean (Knuth's Poisson sampler). */
+function samplePieces(random: Random, mean: number): number {
+  const limit = Math.exp(-mean);
+  let k = 0;
+  let p = 1;
+  do {
+    k++;
+    p *= random.next();
+  } while (p > limit);
+  return k - 1;
+}
+
+/**
+ * Completed finished elements by product category, in whole pieces. Independent of
+ * the batching-plant concrete records: element counts are never derived from m³.
+ */
+function generateElements(random: Random, referenceMs: number): ElementProductionRecord[] {
+  const records: ElementProductionRecord[] = [];
+  const peakHourlyBase = 25;
+  let seq = 0;
+
+  for (const { startMs, civil } of demoDays(referenceMs)) {
+    if (civil.weekday === FRIDAY) continue;
+    const schedule = civil.weekday === SATURDAY ? SATURDAY_HOURLY_BASE : WEEKDAY_HOURLY_BASE;
+    const dayFactor = seasonalFactor(civil.month) * random.between(0.85, 1.12);
+
+    for (const [hourText, base] of Object.entries(schedule)) {
+      const hourStart = startMs + Number(hourText) * 60 * MINUTE_MS;
+      if (hourStart >= referenceMs) continue;
+      if (random.chance(0.06)) continue; // stoppage: elapsed hour with no completed elements
+
+      const intensity = (base / peakHourlyBase) * dayFactor;
+      for (const category of PRODUCT_CATEGORIES) {
+        const pieces = samplePieces(random, DEMO_ELEMENT_HOURLY_RATE[category] * intensity);
+        const completedAtMs = hourStart + random.int(0, 59) * MINUTE_MS;
+        if (pieces === 0 || completedAtMs >= referenceMs) continue;
+        seq++;
+        records.push({
+          id: `DEMO-ELM-${pad(seq, 6)}`,
+          completedAt: toKuwaitIso(completedAtMs),
+          productCategory: category,
+          pieces,
+          productionOrderId: `DEMO-PO-${pad(random.int(1, 60), 4)}`,
+        });
+      }
+    }
+  }
+  return records;
+}
+
+/** Batching-plant concrete batches (m³). Used only for monthly plant capacity. */
+function generateConcreteBatches(random: Random, referenceMs: number): ConcreteBatchRecord[] {
+  const records: ConcreteBatchRecord[] = [];
   let seq = 0;
 
   for (const { startMs, civil } of demoDays(referenceMs)) {
@@ -68,7 +133,7 @@ function generateProduction(random: Random, referenceMs: number): ProductionReco
         if (producedAtMs >= referenceMs) continue;
         seq++;
         records.push({
-          id: `DEMO-PRD-${pad(seq, 6)}`,
+          id: `DEMO-BAT-${pad(seq, 6)}`,
           producedAt: toKuwaitIso(producedAtMs),
           grade: random.pick(DEMO_GRADES),
           volumeM3: round3((hourTotal / batches) * random.between(0.85, 1.15)),
@@ -158,10 +223,12 @@ export function generateDemoDataset(): DemoDataset {
   const random = createRandom(DEMO_SEED);
   return {
     referenceTime: DEMO_REFERENCE_TIME,
-    productionRecords: generateProduction(random, referenceMs),
+    concreteBatches: generateConcreteBatches(random, referenceMs),
     deliveryNotes: generateDeliveries(random, referenceMs),
     salesOrders: generateSalesOrders(random, referenceMs),
     productionOrders: generateProductionOrders(random, referenceMs),
+    // Separate seed: adding element records leaves every other record unchanged.
+    elementRecords: generateElements(createRandom(DEMO_ELEMENT_SEED), referenceMs),
     projects: DEMO_PROJECTS,
     capacityPlans: DEMO_CAPACITY_PLANS,
   };

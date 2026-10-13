@@ -51,9 +51,9 @@ Actual panel dimensions and viewing distance must inform final sizing.
 ## Layout
 - One overview page with no sidebar; no routing library required for the initial scope.
 - Header: logo/title on left; period buttons centrally/right; date/time and fullscreen.
-- Four headline cards: Current Sales Orders, Active Production Orders, Concrete Produced, Delivered Output.
+- Four headline cards: Current Sales Orders, Active Production Orders, Produced Elements (pieces), Delivered Element (pieces, with delivery-note count).
 - Middle: production trend spans approximately two thirds; capacity panel one third.
-- Bottom: grade breakdown and four selected project progress rows.
+- Bottom: Production by Product (Hollowcore, Precast, GRC) and four selected project progress rows.
 - Footer: source label, data timestamp and refresh status.
 - Start with 24–32 px outside padding and 20–24 px panel gaps.
 - 20–24 px panel radius; 12–16 px small control radius; pill selected-period control if useful.
@@ -62,11 +62,11 @@ Actual panel dimensions and viewing distance must inform final sizing.
 - Fit browser-window display separately from native fullscreen; account for browser chrome.
 
 ## Chart conventions
-Trend: readable bars/line, restrained gridlines, explicit m³ axis/unit and sensible tick density. Implemented:
+Trend ("Production Trend"): produced elements in whole pieces; readable bars, restrained gridlines, a "pieces" axis with whole-number ticks, and sensible tick density. Implemented:
 - The panel header shows the period total.
-- Daily, Weekly and Yearly print a whole-m³ value on every productive bar.
+- Daily, Weekly and Yearly print a whole-piece count on every productive bar.
 - Zero-output intervals: no "0" label. They are drawn as a short grey baseline mark, explained by a "No production" legend, and stay distinct from the shaded "Not yet reached" area.
-- Monthly (28–31 bars): only the highest bar carries a number (nothing taller beside it can collide). The selected day is drawn in a lighter blue and both days are described under the chart, e.g. "Selected day, to 2:00 PM: Wed 14 Oct · 152.3 m³" and "Highest day: Sun 11 Oct · 362.7 m³".
+- Monthly (28–31 bars): only the highest bar carries a number (nothing taller beside it can collide). The selected day is drawn in a lighter blue and both days are described under the chart, e.g. "Selected day, to 2:00 PM: Wed 14 Oct · 50 pieces" and "Highest day: Tue 6 Oct · 102 pieces".
 - The interval containing the demo reference time is drawn in a lighter blue (`--chart-blue-emphasis`) and named in the legend: Weekly "Selected day, to 2:00 PM"; Yearly "October 2026, to Wed 14 Oct"; Daily "Current hour, to …" only when that hour is partly elapsed.
 - Hourly axis labels use the 12-hour form "6 AM".
 - Axis labels: every other hour or day for Daily and Monthly, all labels otherwise. The y-axis uses about 3 gridlines.
@@ -77,7 +77,7 @@ Monthly capacity: large semicircle or clean progress visual; show actual / capac
 - The gauge takes all spare height; actual output, capacity and remaining sit in three aligned columns beneath it. Turquoise is neutral, with no good/bad colouring until business thresholds are agreed.
 - Unknown capacity: "Not available", "capacity not set", and "Not set" with no unit.
 - Over capacity: full arc, "over capacity", and "Above capacity".
-Grade mix: horizontal bars with grade names and values; group remaining minor grades as Other if necessary.
+Production by Product: three large horizontal bars (Hollowcore, Precast, GRC) with right-aligned whole-piece counts ("513 pcs"); categories are mutually exclusive and always listed in that order, including zero rows. Concrete grades are no longer shown. (Replaced the grade mix on 12 Oct 2026.)
 Projects: four names, codes as secondary text, percentages and progress bars. Implemented:
 - Panel note "Delivery progress · demo"; each code sits on its own line under the name.
 - Bars use the production blue.
@@ -104,7 +104,7 @@ The demo reference date (Wed 14 Oct 2026, 2:00 PM) differs from the live Kuwait 
   - The redundant "Volume produced" caption was removed.
 - **Colour roles:**
   - RECAFCO red: selected controls.
-  - Blue: production bars, grade bars, project progress.
+  - Blue: production bars, product bars, project progress.
   - Light blue: the in-progress (selected-day / current-month) bar.
   - Turquoise: capacity only.
   - Amber: demo/warning.

@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aggregateByBuckets,
   aggregateDeliveries,
-  aggregateProduction,
   buildDashboardSnapshot,
   capacityUsage,
   countActiveProductionOrders,
   countOpenSalesOrders,
-  groupGrades,
+  piecesByProduct,
+  prepareConcrete,
   prepareDataset,
   prepareDeliveries,
-  prepareProduction,
-  sumVolumes,
+  prepareElements,
 } from './aggregate';
-import type { DemoDataset, ProductionOrder, SalesOrder } from './contracts';
+import type { DemoDataset, ProductCategory, ProductionOrder, SalesOrder } from './contracts';
 import { getPeriodWindow, parseInstant } from './periods';
 
 const REF = '2026-10-14T14:00:00+03:00';
@@ -21,7 +21,8 @@ const refMs = parseInstant(REF);
 function dataset(overrides: Partial<DemoDataset> = {}): DemoDataset {
   return {
     referenceTime: REF,
-    productionRecords: [],
+    elementRecords: [],
+    concreteBatches: [],
     deliveryNotes: [],
     salesOrders: [],
     productionOrders: [],
@@ -31,31 +32,34 @@ function dataset(overrides: Partial<DemoDataset> = {}): DemoDataset {
   };
 }
 
-const production = (id: string, producedAt: string, volumeM3: number, grade = 'C40') => ({
-  id, producedAt, grade, volumeM3, productionOrderId: 'PO-1',
+const element = (id: string, completedAt: string, pieces: number, productCategory: ProductCategory = 'hollowcore') => ({
+  id, completedAt, productCategory, pieces, productionOrderId: 'PO-1',
+});
+const batch = (id: string, producedAt: string, volumeM3: number) => ({
+  id, producedAt, grade: 'C40', volumeM3, productionOrderId: 'PO-1',
 });
 
 describe('range boundaries', () => {
   const day = getPeriodWindow('daily', refMs);
   const farFuture = parseInstant('2030-01-01T00:00:00+03:00');
 
-  it('includes a record exactly at the range start and excludes one exactly at the range end', () => {
-    const records = prepareProduction([
-      production('start', '2026-10-14T00:00:00+03:00', 1),
-      production('end', '2026-10-15T00:00:00+03:00', 2),
-      production('before', '2026-10-13T23:59:59+03:00', 4),
+  it('includes an element exactly at the range start and excludes one exactly at the range end', () => {
+    const records = prepareElements([
+      element('start', '2026-10-14T00:00:00+03:00', 2),
+      element('end', '2026-10-15T00:00:00+03:00', 5),
+      element('before', '2026-10-13T23:59:59+03:00', 7),
     ]);
-    const result = aggregateProduction(records, day, farFuture);
-    expect(result.totalLitres).toBe(1000);
-    expect(result.buckets[0]!.litres).toBe(1000);
+    const result = aggregateByBuckets(records, day, farFuture);
+    expect(result.total).toBe(2);
+    expect(result.buckets[0]!.amount).toBe(2);
   });
 
-  it('excludes records at or after the as-of time', () => {
-    const records = prepareProduction([
-      production('just-before', '2026-10-14T13:59:59+03:00', 1.5),
-      production('at-as-of', '2026-10-14T14:00:00+03:00', 3),
+  it('excludes elements at or after the as-of time', () => {
+    const records = prepareElements([
+      element('just-before', '2026-10-14T13:59:59+03:00', 3),
+      element('at-as-of', '2026-10-14T14:00:00+03:00', 4),
     ]);
-    expect(aggregateProduction(records, day, refMs).totalLitres).toBe(1500);
+    expect(aggregateByBuckets(records, day, refMs).total).toBe(3);
   });
 
   it('applies the same boundaries to deliveries', () => {
@@ -67,43 +71,71 @@ describe('range boundaries', () => {
   });
 });
 
-describe('future intervals versus elapsed zero output', () => {
+describe('future intervals versus elapsed zero production', () => {
   it('marks buckets from the as-of hour onward as null and elapsed empty hours as 0', () => {
-    const records = prepareProduction([production('a', '2026-10-14T09:10:00+03:00', 5)]);
-    const { buckets } = aggregateProduction(records, getPeriodWindow('daily', refMs), refMs);
-    expect(buckets[3]!.litres).toBe(0); // 03:00 elapsed, nothing produced
-    expect(buckets[9]!.litres).toBe(5000);
-    expect(buckets[13]!.litres).toBe(0); // 13:00–14:00 elapsed
-    expect(buckets.slice(14).every((b) => b.litres === null)).toBe(true);
+    const records = prepareElements([element('a', '2026-10-14T09:10:00+03:00', 5)]);
+    const { buckets } = aggregateByBuckets(records, getPeriodWindow('daily', refMs), refMs);
+    expect(buckets[3]!.amount).toBe(0); // 3 AM elapsed, nothing completed
+    expect(buckets[9]!.amount).toBe(5);
+    expect(buckets[13]!.amount).toBe(0); // 1–2 PM elapsed
+    expect(buckets.slice(14).every((b) => b.amount === null)).toBe(true);
   });
 
   it('keeps the partly elapsed bucket as a number in longer periods', () => {
-    const { buckets } = aggregateProduction([], getPeriodWindow('yearly', refMs), refMs);
-    expect(buckets[9]!.litres).toBe(0); // October, in progress
-    expect(buckets[10]!.litres).toBeNull(); // November
+    const { buckets } = aggregateByBuckets([], getPeriodWindow('yearly', refMs), refMs);
+    expect(buckets[9]!.amount).toBe(0); // October, in progress
+    expect(buckets[10]!.amount).toBeNull(); // November
   });
 });
 
-describe('reconciliation and precision', () => {
-  it('sums in whole litres so trend and grades equal the total exactly', () => {
-    const records = prepareProduction([
-      production('a', '2026-10-14T08:05:00+03:00', 0.1, 'C40'),
-      production('b', '2026-10-14T08:15:00+03:00', 0.2, 'C50'),
-      production('c', '2026-10-14T09:00:00+03:00', 0.7, 'C40'),
-    ]);
-    const result = aggregateProduction(records, getPeriodWindow('daily', refMs), refMs);
-    expect(result.totalLitres).toBe(1000); // 0.1 + 0.2 + 0.7 = 1.000 exactly
-    expect(result.buckets.reduce((s, b) => s + (b.litres ?? 0), 0)).toBe(1000);
-    expect([...result.grades.values()].reduce((s, l) => s + l, 0)).toBe(1000);
-    expect(sumVolumes([0.1, 0.2, null])).toBe(0.3);
+describe('produced elements', () => {
+  const records = [
+    element('h1', '2026-10-14T08:05:00+03:00', 3, 'hollowcore'),
+    element('p1', '2026-10-14T08:15:00+03:00', 2, 'precast'),
+    element('g1', '2026-10-14T09:00:00+03:00', 1, 'grc'),
+    element('h2', '2026-10-14T10:30:00+03:00', 4, 'hollowcore'),
+  ];
+
+  it('reconciles trend and product totals exactly with the produced-elements total', () => {
+    const s = buildDashboardSnapshot(prepareDataset(dataset({ elementRecords: records })), 'daily');
+    const { total, trend, products } = s.output.elements;
+    expect(total).toBe(10);
+    expect(trend.reduce((sum, b) => sum + (b.pieces ?? 0), 0)).toBe(10);
+    expect(products.reduce((sum, p) => sum + p.pieces, 0)).toBe(10);
   });
 
-  it('groups grades beyond five rows into "Other grades" without losing volume', () => {
-    const grades = new Map([['A', 6000], ['B', 5000], ['C', 4000], ['D', 3000], ['E', 2000], ['F', 1000]]);
-    const rows = groupGrades(grades);
-    expect(rows.map((r) => r.grade)).toEqual(['A', 'B', 'C', 'D', 'Other grades']);
-    expect(rows.at(-1)!.volume).toBe(3);
-    expect(groupGrades(new Map([['A', 1], ['B', 0]]))).toEqual([{ grade: 'A', volume: 0.001 }]);
+  it('lists every category exactly once, so no element is counted twice', () => {
+    const products = piecesByProduct(prepareElements(records));
+    expect(products).toEqual([
+      { category: 'hollowcore', pieces: 7 },
+      { category: 'precast', pieces: 2 },
+      { category: 'grc', pieces: 1 },
+    ]);
+    expect(piecesByProduct([])).toEqual([
+      { category: 'hollowcore', pieces: 0 },
+      { category: 'precast', pieces: 0 },
+      { category: 'grc', pieces: 0 },
+    ]);
+  });
+
+  it('keeps batching-plant m³ out of element pieces, and elements out of capacity', () => {
+    const data = prepareDataset(
+      dataset({
+        elementRecords: [element('h', '2026-10-14T08:00:00+03:00', 6)],
+        concreteBatches: [batch('b', '2026-10-14T08:00:00+03:00', 25.5)],
+      }),
+    );
+    const s = buildDashboardSnapshot(data, 'daily');
+    expect(s.output.elements.total).toBe(6);
+    expect(s.output.elements.unit).toBe('pieces');
+    expect(s.capacity.actualOutput).toBe(25.5);
+    expect(s.capacity.unit).toBe('m3');
+  });
+
+  it('does not infer elements from concrete volume when no element records exist', () => {
+    const s = buildDashboardSnapshot(prepareDataset(dataset({ concreteBatches: [batch('b', '2026-10-14T08:00:00+03:00', 300)] })), 'daily');
+    expect(s.output.elements.total).toBe(0);
+    expect(s.capacity.actualOutput).toBe(300);
   });
 });
 
@@ -116,6 +148,11 @@ describe('deliveries: pieces versus document counts', () => {
       { id: 'DN-1', deliveredAt: '2026-10-14T08:00:00+03:00', status: 'completed', projectCode: 'P', lines: [{ itemCode: 'A', pieces: 6 }, { itemCode: 'B', pieces: 4 }] },
     ]);
     expect(aggregateDeliveries(notes, getPeriodWindow('daily', refMs), refMs)).toEqual({ pieces: 17, documentCount: 2 });
+  });
+
+  it('derives deliveries from delivery notes, not from production records', () => {
+    const s = buildDashboardSnapshot(prepareDataset(dataset({ elementRecords: [element('h', '2026-10-14T08:00:00+03:00', 9)] })), 'daily');
+    expect(s.output.delivered).toEqual({ total: 0, unit: 'pieces', documentCount: 0 });
   });
 });
 
@@ -146,7 +183,7 @@ describe('order snapshot rules', () => {
   });
 });
 
-describe('monthly capacity', () => {
+describe('monthly batching-plant capacity', () => {
   const base = { month: '2026-10', unit: 'm3', basis: 'illustrative-demo' } as const;
 
   it('computes month-to-date share and remaining volume', () => {
@@ -169,6 +206,15 @@ describe('monthly capacity', () => {
     expect(result.remaining).toBe(-200.5);
   });
 
+  it('sums concrete in whole litres so three-decimal volumes stay exact', () => {
+    const litres = aggregateByBuckets(
+      prepareConcrete([batch('a', '2026-10-01T08:00:00+03:00', 0.1), batch('b', '2026-10-01T09:00:00+03:00', 0.2)]),
+      getPeriodWindow('monthly', refMs),
+      refMs,
+    ).total;
+    expect(litres).toBe(300);
+  });
+
   it('reports unknown capacity when no plan exists for the reference month', () => {
     const snapshot = buildDashboardSnapshot(prepareDataset(dataset({ capacityPlans: [] })), 'daily');
     expect(snapshot.capacity.plannedCapacity).toBeNull();
@@ -178,10 +224,10 @@ describe('monthly capacity', () => {
   it('uses the month containing the reference time, whatever the period', () => {
     const data = prepareDataset(
       dataset({
-        productionRecords: [
-          production('sep', '2026-09-30T23:59:00+03:00', 50),
-          production('oct', '2026-10-01T00:00:00+03:00', 20),
-          production('today', '2026-10-14T08:00:00+03:00', 5),
+        concreteBatches: [
+          batch('sep', '2026-09-30T23:59:00+03:00', 50),
+          batch('oct', '2026-10-01T00:00:00+03:00', 20),
+          batch('today', '2026-10-14T08:00:00+03:00', 5),
         ],
       }),
     );
@@ -190,6 +236,5 @@ describe('monthly capacity', () => {
       expect(s.capacity.month).toBe('2026-10');
       expect(s.capacity.actualOutput).toBe(25);
     }
-    expect(buildDashboardSnapshot(data, 'yearly').output.concrete.total).toBe(75);
   });
 });

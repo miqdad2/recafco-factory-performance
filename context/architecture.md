@@ -7,7 +7,7 @@
 | Build tool | Vite | Development server and static production assets |
 | Styling | Tailwind CSS + CSS variables | Large-screen layout and tokens |
 | Controls | Selected shadcn/ui components | Accessible period and fullscreen controls |
-| Charts | Apache ECharts | Trend, capacity and grade visuals |
+| Charts | Apache ECharts | Production trend (ECharts); capacity gauge and product bars are SVG/HTML |
 | Client data | TanStack Query | Cached snapshots, refresh and retries |
 | Validation | Zod | Validate period requests and provider responses |
 | Future backend | NestJS | SAP access, scheduled collection and KPI aggregation |
@@ -62,7 +62,7 @@ A snapshot contains:
 - selectedPeriod and range start/end/timeZone/bucket granularity.
 - sourceDataAsOf and fetchedAt as separate timestamps.
 - current order counts and their snapshot timestamp.
-- concrete production total, unit, trend buckets and grade breakdown.
+- produced-elements total (whole pieces), trend buckets and per-product breakdown (Hollowcore, Precast, GRC).
 - delivered output total and explicit unit.
 - monthly capacity month, planned capacity, actual output, remaining volume and percentage.
 - selected project names/codes, percentage and calculation basis.
@@ -70,9 +70,10 @@ A snapshot contains:
 
 Implemented in Unit 2 (`src/lib/dashboard/contracts.ts`):
 - `range` is the full calendar period [start, end). Data runs only to `sourceDataAsOf`.
-- Trend buckets carry `start`, `end` and `volume`. `volume: null` means not yet reached; `0` means an elapsed interval with no output.
+- Trend buckets carry `start`, `end` and `pieces` (whole completed elements). `pieces: null` means not yet reached; `0` means an elapsed interval with no production.
 - `output.delivered` carries `total`, `unit` and a separate `documentCount`.
-- Snapshot validation rejects a trend or grade breakdown that does not add up to the total, and rejects a capacity percentage without a known capacity.
+- Snapshot validation rejects fractional piece counts, a trend or product breakdown that does not add up to the produced-elements total, a product category listed twice or missing, and a capacity percentage without a known capacity.
+- Finished elements and batching-plant concrete are separate source records (`elementRecords` in pieces, `concreteBatches` in m³). Concrete m³ feeds only Monthly Plant Capacity; element pieces are never derived from m³ (element-production update, 12 Oct 2026).
 - Demo `sourceDataAsOf` is a fixed reference time (Wed 14 Oct 2026, 14:00 Kuwait). `fetchedAt` is when the provider finished loading.
 - Providers reject with `DashboardDataError`, using the codes `invalid-response`, `invalid-source-data`, `aborted` and `unavailable`.
 

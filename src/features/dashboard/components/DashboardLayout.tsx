@@ -5,7 +5,7 @@ interface DashboardLayoutProps {
   cards: ReactNode;
   trend: ReactNode;
   capacity: ReactNode;
-  grades: ReactNode;
+  products: ReactNode;
   projects: ReactNode;
   footer: ReactNode;
   busy?: boolean;
@@ -18,7 +18,7 @@ interface DashboardLayoutProps {
  * (e.g. 1366×768, the `compact` variant) the page grows to its content and
  * scrolls vertically instead of squeezing panels; narrow screens stack panels.
  */
-export function DashboardLayout({ header, cards, trend, capacity, grades, projects, footer, busy }: DashboardLayoutProps) {
+export function DashboardLayout({ header, cards, trend, capacity, products, projects, footer, busy }: DashboardLayoutProps) {
   return (
     <main
       aria-busy={busy || undefined}
@@ -33,7 +33,7 @@ export function DashboardLayout({ header, cards, trend, capacity, grades, projec
       </div>
 
       <div className="grid min-h-0 grid-cols-1 gap-5 lg:grid-cols-12">
-        <div className="flex min-h-0 min-w-0 flex-col lg:col-span-5">{grades}</div>
+        <div className="flex min-h-0 min-w-0 flex-col lg:col-span-5">{products}</div>
         <div className="flex min-h-0 min-w-0 flex-col lg:col-span-7">{projects}</div>
       </div>
 

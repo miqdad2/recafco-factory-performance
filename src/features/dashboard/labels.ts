@@ -1,4 +1,4 @@
-import type { BucketGranularity, DashboardSnapshot, DeliveredUnit, Period } from '../../lib/dashboard/contracts';
+import type { BucketGranularity, DashboardSnapshot, DeliveredUnit, Period, ProductCategory } from '../../lib/dashboard/contracts';
 import { isDashboardDataError } from '../../lib/dashboard/errors';
 import {
   formatKuwaitDayMonth,
@@ -38,6 +38,13 @@ export const TREND_INTERVAL_LABELS: Record<BucketGranularity, string> = {
   hour: 'Hourly output',
   day: 'Daily output',
   month: 'Monthly output',
+};
+
+/** Display names of the demo product categories (from the supplied reference). */
+export const PRODUCT_LABELS: Record<ProductCategory, string> = {
+  hollowcore: 'Hollowcore',
+  precast: 'Precast',
+  grc: 'GRC',
 };
 
 export const DELIVERED_UNIT_LABELS: Record<DeliveredUnit, string> = {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildDashboardSnapshot, prepareDataset } from './aggregate';
-import { PERIODS } from './contracts';
+import { PERIODS, PRODUCT_CATEGORIES } from './contracts';
 import { DEMO_REFERENCE_TIME } from './fixtures/catalog';
 import { generateDemoDataset } from './fixtures/generate';
-import { parseInstant } from './periods';
-import { toLitres } from './units';
+import { kuwaitMonthKey, parseInstant } from './periods';
+import { fromLitres, toLitres } from './units';
 import { parseDemoDataset, parseSnapshot } from './validate';
 
 const raw = generateDemoDataset();
@@ -13,7 +13,7 @@ const snapshots = Object.fromEntries(PERIODS.map((p) => [p, buildDashboardSnapsh
   (typeof PERIODS)[number],
   ReturnType<typeof buildDashboardSnapshot>
 >;
-const litres = (values: ReadonlyArray<number | null>) => values.reduce<number>((s, v) => s + toLitres(v ?? 0), 0);
+const refMs = parseInstant(DEMO_REFERENCE_TIME);
 
 describe('demo dataset', () => {
   it('is reproducible', () => {
@@ -21,19 +21,24 @@ describe('demo dataset', () => {
   });
 
   it('has no records at or after the reference time', () => {
-    const refMs = parseInstant(DEMO_REFERENCE_TIME);
-    expect(raw.productionRecords.every((r) => parseInstant(r.producedAt) < refMs)).toBe(true);
+    expect(raw.elementRecords.every((r) => parseInstant(r.completedAt) < refMs)).toBe(true);
+    expect(raw.concreteBatches.every((r) => parseInstant(r.producedAt) < refMs)).toBe(true);
     expect(raw.deliveryNotes.every((n) => parseInstant(n.deliveredAt) < refMs)).toBe(true);
   });
 
-  it('uses only fictional identifiers and volumes with at most three decimals', () => {
+  it('uses fictional identifiers, whole element pieces and concrete volumes with at most three decimals', () => {
     expect(raw.projects.every((p) => p.code.startsWith('DEMO-'))).toBe(true);
     expect(raw.salesOrders.every((o) => o.id.startsWith('DEMO-') && o.customer.startsWith('Demo '))).toBe(true);
-    expect(raw.productionRecords.every((r) => Math.abs(r.volumeM3 * 1000 - Math.round(r.volumeM3 * 1000)) < 1e-6)).toBe(true);
+    expect(raw.elementRecords.every((r) => r.id.startsWith('DEMO-ELM-') && Number.isInteger(r.pieces) && r.pieces > 0)).toBe(true);
+    expect(raw.concreteBatches.every((r) => Math.abs(r.volumeM3 * 1000 - Math.round(r.volumeM3 * 1000)) < 1e-6)).toBe(true);
   });
 
-  it('includes several concrete grades and cancelled deliveries to exclude', () => {
-    expect(new Set(raw.productionRecords.map((r) => r.grade)).size).toBeGreaterThanOrEqual(5);
+  it('includes all three product categories, each record in exactly one', () => {
+    expect(new Set(raw.elementRecords.map((r) => r.productCategory))).toEqual(new Set(PRODUCT_CATEGORIES));
+    expect(new Set(raw.elementRecords.map((r) => r.id)).size).toBe(raw.elementRecords.length);
+  });
+
+  it('includes cancelled deliveries to exclude', () => {
     expect(raw.deliveryNotes.some((n) => n.status === 'cancelled')).toBe(true);
   });
 });
@@ -45,16 +50,22 @@ describe.each(PERIODS)('%s snapshot', (period) => {
     expect(() => parseSnapshot({ ...s, source: 'demo', fetchedAt: DEMO_REFERENCE_TIME })).not.toThrow();
   });
 
-  it('reconciles trend and grade breakdown exactly with Concrete Produced', () => {
-    const total = toLitres(s.output.concrete.total);
+  it('reconciles trend and product breakdown exactly with Produced Elements', () => {
+    const { total, trend, products } = s.output.elements;
     expect(total).toBeGreaterThan(0);
-    expect(litres(s.output.concrete.trend.map((b) => b.volume))).toBe(total);
-    expect(litres(s.output.concrete.grades.map((g) => g.volume))).toBe(total);
+    expect(Number.isInteger(total)).toBe(true);
+    expect(trend.reduce((sum, b) => sum + (b.pieces ?? 0), 0)).toBe(total);
+    expect(products.reduce((sum, p) => sum + p.pieces, 0)).toBe(total);
+    expect(products.map((p) => p.category)).toEqual([...PRODUCT_CATEGORIES]);
   });
 
   it('keeps delivered pieces separate from the delivery note count', () => {
     expect(s.output.delivered.unit).toBe('pieces');
     expect(s.output.delivered.total).toBeGreaterThan(s.output.delivered.documentCount);
+  });
+
+  it('produces at least as many elements as it delivers', () => {
+    expect(s.output.elements.total).toBeGreaterThanOrEqual(s.output.delivered.total);
   });
 });
 
@@ -70,27 +81,33 @@ describe('across period selections', () => {
   });
 
   it('nests period totals: day ≤ week ≤ month ≤ year', () => {
-    const total = (p: (typeof PERIODS)[number]) => snapshots[p].output.concrete.total;
+    const total = (p: (typeof PERIODS)[number]) => snapshots[p].output.elements.total;
     expect(total('daily')).toBeLessThan(total('weekly'));
     expect(total('weekly')).toBeLessThan(total('monthly'));
     expect(total('monthly')).toBeLessThan(total('yearly'));
   });
 
-  it('derives monthly capacity actual output from the same records as the Monthly total', () => {
-    expect(snapshots.daily.capacity.actualOutput).toBe(snapshots.monthly.output.concrete.total);
+  it('derives monthly capacity from batching-plant m³ records only', () => {
+    const octoberLitres = raw.concreteBatches
+      .filter((b) => kuwaitMonthKey(parseInstant(b.producedAt)) === '2026-10')
+      .reduce((sum, b) => sum + toLitres(b.volumeM3), 0);
+    expect(snapshots.daily.capacity.actualOutput).toBe(fromLitres(octoberLitres));
+    expect(snapshots.daily.capacity.unit).toBe('m3');
     expect(snapshots.daily.capacity.month).toBe('2026-10');
     expect(snapshots.daily.capacity.basis).toBe('illustrative-demo');
+    // Pieces and m³ are different measures and must not coincide by construction.
+    expect(snapshots.monthly.output.elements.total).not.toBe(snapshots.daily.capacity.actualOutput);
   });
 
   it('shows future intervals as null and has elapsed zero-output intervals', () => {
-    const daily = snapshots.daily.output.concrete.trend;
-    expect(daily.slice(14).every((b) => b.volume === null)).toBe(true);
-    expect(daily.slice(0, 14).every((b) => b.volume !== null)).toBe(true);
-    expect(daily.slice(2, 5).map((b) => b.volume)).toEqual([0, 0, 0]); // 02:00–05:00 not scheduled
-    const weekly = snapshots.weekly.output.concrete.trend; // reference is Wednesday
-    expect(weekly.slice(0, 4).every((b) => b.volume !== null)).toBe(true);
-    expect(weekly.slice(4).every((b) => b.volume === null)).toBe(true);
-    const yearly = snapshots.yearly.output.concrete.trend;
-    expect(yearly.map((b) => b.volume === null)).toEqual([...Array(10).fill(false), true, true]);
+    const daily = snapshots.daily.output.elements.trend;
+    expect(daily.slice(14).every((b) => b.pieces === null)).toBe(true);
+    expect(daily.slice(0, 14).every((b) => b.pieces !== null)).toBe(true);
+    expect(daily.slice(2, 5).map((b) => b.pieces)).toEqual([0, 0, 0]); // 2–5 AM not scheduled
+    const weekly = snapshots.weekly.output.elements.trend; // reference is Wednesday
+    expect(weekly.slice(0, 4).every((b) => b.pieces !== null)).toBe(true);
+    expect(weekly.slice(4).every((b) => b.pieces === null)).toBe(true);
+    const yearly = snapshots.yearly.output.elements.trend;
+    expect(yearly.map((b) => b.pieces === null)).toEqual([...Array(10).fill(false), true, true]);
   });
 });

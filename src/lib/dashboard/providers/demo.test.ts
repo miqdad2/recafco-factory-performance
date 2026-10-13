@@ -51,12 +51,24 @@ describe('demo provider', () => {
 
   it('rejects invalid source records with a typed error', async () => {
     const broken = generateDemoDataset();
-    broken.productionRecords[0] = { ...broken.productionRecords[0]!, volumeM3: -3 };
+    broken.concreteBatches[0] = { ...broken.concreteBatches[0]!, volumeM3: -3 };
     const error = await expectCode(
       createDemoProvider({ delayMs: 0, loadDataset: () => broken }).getSnapshot({ period: 'daily' }),
       'invalid-source-data',
     );
-    expect(error.issues[0]).toContain('productionRecords.0.volumeM3');
+    expect(error.issues[0]).toContain('concreteBatches.0.volumeM3');
+  });
+
+  it('rejects fractional, zero or uncategorised element records', async () => {
+    for (const change of [{ pieces: 2.5 }, { pieces: 0 }, { productCategory: 'concrete' }]) {
+      const broken = generateDemoDataset();
+      broken.elementRecords[0] = { ...broken.elementRecords[0]!, ...change } as (typeof broken.elementRecords)[number];
+      const error = await expectCode(
+        createDemoProvider({ delayMs: 0, loadDataset: () => broken }).getSnapshot({ period: 'daily' }),
+        'invalid-source-data',
+      );
+      expect(error.issues[0]).toContain('elementRecords.0');
+    }
   });
 
   it('rejects source records with an invalid timestamp', async () => {
@@ -80,17 +92,41 @@ describe('snapshot validation at the provider boundary', () => {
     }
   });
 
-  it('rejects a trend or grade breakdown that does not add up to the total', async () => {
+  it('rejects fractional produced-element counts', async () => {
     const s = await validSnapshot();
-    const concrete = s.output.concrete;
-    const badTrend = { ...s, output: { ...s.output, concrete: { ...concrete, total: concrete.total + 1 } } };
+    const elements = s.output.elements;
+    const fractionalTotal = { ...s, output: { ...s.output, elements: { ...elements, total: elements.total + 0.5 } } };
+    expect(() => parseSnapshot(fractionalTotal)).toThrow(DashboardDataError);
+    const fractionalBucket = {
+      ...s,
+      output: { ...s.output, elements: { ...elements, trend: elements.trend.map((b, i) => (i === 0 ? { ...b, pieces: 1.5 } : b)) } },
+    };
+    expect(() => parseSnapshot(fractionalBucket)).toThrow(DashboardDataError);
+  });
+
+  it('rejects a trend or product breakdown that does not add up to the total', async () => {
+    const s = await validSnapshot();
+    const elements = s.output.elements;
+    const badTotal = { ...s, output: { ...s.output, elements: { ...elements, total: elements.total + 1 } } };
     try {
-      parseSnapshot(badTrend);
+      parseSnapshot(badTotal);
       expect.unreachable();
     } catch (error) {
       expect((error as DashboardDataError).code).toBe('invalid-response');
-      expect((error as DashboardDataError).issues.join(' ')).toMatch(/Trend does not add up/);
+      const issues = (error as DashboardDataError).issues.join(' ');
+      expect(issues).toMatch(/Trend does not add up/);
+      expect(issues).toMatch(/Products do not add up/);
     }
+  });
+
+  it('rejects a product listed twice, which would double-count elements', async () => {
+    const s = await validSnapshot();
+    const elements = s.output.elements;
+    const [first, second] = elements.products;
+    // Same total, but Hollowcore appears twice and Precast is missing.
+    const doubled = [first!, { category: first!.category, pieces: second!.pieces }, ...elements.products.slice(2)];
+    const bad = { ...s, output: { ...s.output, elements: { ...elements, products: doubled } } };
+    expect(() => parseSnapshot(bad)).toThrow(/failed validation/);
   });
 
   it('rejects a capacity percentage without a known capacity', async () => {

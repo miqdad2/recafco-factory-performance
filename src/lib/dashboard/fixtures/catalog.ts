@@ -2,7 +2,7 @@
  * Fixed demo reference data. Everything here is FICTIONAL and illustrative.
  * See README.md in this folder for the full list of assumptions.
  */
-import type { CapacityPlan, Project } from '../contracts';
+import type { CapacityPlan, ProductCategory, Project } from '../contracts';
 
 /**
  * Demo reference timestamp: the moment all demo data refers to ("data as of").
@@ -15,8 +15,22 @@ export const DEMO_REFERENCE_TIME = '2026-10-14T14:00:00+03:00';
 export const DEMO_DATASET_START = { year: 2026, month: 1, day: 1 } as const;
 
 export const DEMO_SEED = 20261014;
+/** Separate seed for finished-element records, so other demo records stay unchanged. */
+export const DEMO_ELEMENT_SEED = DEMO_SEED + 1;
 
-/** Concrete grades with their approximate share of output. */
+/**
+ * Mean completed pieces per hour at full shift intensity, by product category
+ * (illustrative). A full weekday produces roughly 51 Hollowcore, 30 Precast and
+ * 9 GRC elements, so production exceeds deliveries over every period. Categories
+ * are mutually exclusive in the demo.
+ */
+export const DEMO_ELEMENT_HOURLY_RATE: Record<ProductCategory, number> = {
+  hollowcore: 3.8,
+  precast: 2.2,
+  grc: 0.7,
+};
+
+/** Concrete grades of batching-plant batches (capacity records only; not shown). */
 export const DEMO_GRADES = [
   ['C40', 0.33],
   ['C50', 0.25],

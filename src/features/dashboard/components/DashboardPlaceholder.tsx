@@ -6,7 +6,7 @@ import { DashboardHeader } from './DashboardHeader';
 import { DashboardLayout } from './DashboardLayout';
 import { PeriodControls } from './PeriodControls';
 
-const CARD_TITLES = ['Current Sales Orders', 'Active Production Orders', 'Concrete Produced', 'Delivered Output'];
+const CARD_TITLES = ['Current Sales Orders', 'Active Production Orders', 'Produced Elements', 'Delivered Element'];
 
 /** Solid, static block standing in for a figure. Never shows a number. */
 function Block({ className }: { className: string }) {
@@ -60,7 +60,7 @@ export function DashboardPlaceholder(props: DashboardPlaceholderProps) {
       }
       cards={CARD_TITLES.map((title) => <PlaceholderCard key={title} title={title} />)}
       trend={
-        <PlaceholderPanel title="Concrete Production Trend">
+        <PlaceholderPanel title="Production Trend">
           <div role={loading ? 'status' : 'alert'} className="flex flex-col items-center gap-4 px-6 text-center">
             <p className="text-panel font-semibold text-ink">{status}</p>
             {props.mode === 'error' ? (
@@ -81,7 +81,7 @@ export function DashboardPlaceholder(props: DashboardPlaceholderProps) {
         </PlaceholderPanel>
       }
       capacity={<PlaceholderPanel title="Monthly Plant Capacity" />}
-      grades={<PlaceholderPanel title="Production by Concrete Grade" />}
+      products={<PlaceholderPanel title="Production by Product" />}
       projects={<PlaceholderPanel title="Active Projects" />}
       footer={<DashboardFooter source="demo" sourceDataAsOf={null} fetchedAt={null} />}
     />

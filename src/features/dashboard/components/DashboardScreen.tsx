@@ -6,11 +6,11 @@ import { CapacityPanel } from './CapacityPanel';
 import { DashboardFooter } from './DashboardFooter';
 import { DashboardHeader } from './DashboardHeader';
 import { DashboardLayout } from './DashboardLayout';
-import { GradeMixPanel } from './GradeMixPanel';
 import { KpiCards } from './KpiCards';
 import { PeriodControls } from './PeriodControls';
 import { PeriodStatus } from './PeriodStatus';
 import { ProductionTrendPanel } from './ProductionTrendPanel';
+import { ProductMixPanel } from './ProductMixPanel';
 import { ProjectProgressPanel } from './ProjectProgressPanel';
 
 /**
@@ -19,7 +19,7 @@ import { ProjectProgressPanel } from './ProjectProgressPanel';
  */
 export function DashboardScreen({ selection }: { selection: Extract<PeriodSelection, { status: 'ready' }> }) {
   const { snapshot, requested, pending, failure, select } = selection;
-  const { concrete } = snapshot.output;
+  const { elements } = snapshot.output;
 
   // The retry button disappears as soon as a retry starts. If it had focus,
   // move focus to the requested period button instead of losing it.
@@ -66,15 +66,15 @@ export function DashboardScreen({ selection }: { selection: Extract<PeriodSelect
       cards={<KpiCards snapshot={snapshot} />}
       trend={
         <ProductionTrendPanel
-          trend={concrete.trend}
-          total={concrete.total}
+          trend={elements.trend}
+          total={elements.total}
           granularity={snapshot.range.granularity}
           period={snapshot.selectedPeriod}
           asOf={snapshot.sourceDataAsOf}
         />
       }
       capacity={<CapacityPanel capacity={snapshot.capacity} />}
-      grades={<GradeMixPanel grades={concrete.grades} total={concrete.total} period={snapshot.selectedPeriod} />}
+      products={<ProductMixPanel products={elements.products} total={elements.total} period={snapshot.selectedPeriod} />}
       projects={<ProjectProgressPanel projects={snapshot.projects} />}
       footer={<DashboardFooter source={snapshot.source} sourceDataAsOf={snapshot.sourceDataAsOf} fetchedAt={snapshot.fetchedAt} />}
     />

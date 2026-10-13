@@ -1,5 +1,5 @@
 import type { DashboardSnapshot } from '../../../lib/dashboard/contracts';
-import { formatCount, formatVolume } from '../../../lib/format';
+import { formatCount } from '../../../lib/format';
 import { DELIVERED_UNIT_LABELS, formatSnapshotTime, PERIOD_SCOPES, SNAPSHOT_SCOPE } from '../labels';
 import { KpiCard } from './KpiCard';
 
@@ -28,14 +28,14 @@ export function KpiCards({ snapshot }: { snapshot: DashboardSnapshot }) {
         caption={snapshotTime}
       />
       <KpiCard
-        label="Concrete Produced"
-        value={formatVolume(output.concrete.total)}
-        unit="m³"
+        label="Produced Elements"
+        value={formatCount(output.elements.total)}
+        unit="pieces"
         scope={periodScope}
         scopeKind="period"
       />
       <KpiCard
-        label="Delivered Output"
+        label="Delivered Element"
         value={formatCount(output.delivered.total)}
         unit={DELIVERED_UNIT_LABELS[output.delivered.unit]}
         scope={periodScope}

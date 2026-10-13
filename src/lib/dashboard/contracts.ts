@@ -2,12 +2,25 @@
  * Data contracts shared by every provider (demo now, HTTP/NestJS later).
  * Zod schemas validate data at the provider boundary; TypeScript types are
  * inferred from them. Presentation components only read DashboardSnapshot.
+ *
+ * Two production measures are kept strictly apart:
+ * - Finished elements (whole pieces, by product category) drive Produced Elements,
+ *   the Production Trend and Production by Product.
+ * - Batching-plant concrete (m³) drives Monthly Plant Capacity only.
+ * Pieces are never inferred from m³, and m³ never enters a piece total.
  */
 import { z } from 'zod';
-import { toLitres } from './units';
 
 export const PERIODS = ['daily', 'weekly', 'monthly', 'yearly'] as const;
 export type Period = (typeof PERIODS)[number];
+
+/**
+ * Demo product categories (from the supplied reference). Each element belongs to
+ * exactly one category, so category totals never double-count. The SAP
+ * item-to-category mapping is still to be confirmed.
+ */
+export const PRODUCT_CATEGORIES = ['hollowcore', 'precast', 'grc'] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 
 export type DataSource = 'demo' | 'sap';
 export type BucketGranularity = 'hour' | 'day' | 'month';
@@ -25,11 +38,20 @@ const monthKey = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 /* Source records (synthetic demo dataset; later mapped from SAP)      */
 /* ------------------------------------------------------------------ */
 
-export const productionRecordSchema = z.object({
+/** Completed finished elements: one category, a whole number of pieces. */
+export const elementProductionRecordSchema = z.object({
+  id,
+  completedAt: instant,
+  productCategory: z.enum(PRODUCT_CATEGORIES),
+  pieces: z.number().int().positive(),
+  productionOrderId: id,
+});
+
+/** Batching-plant concrete output (m³, at most three decimals). Capacity only. */
+export const concreteBatchRecordSchema = z.object({
   id,
   producedAt: instant,
   grade: z.string().min(1),
-  /** m³, at most three decimals. */
   volumeM3: volume,
   productionOrderId: id,
 });
@@ -77,7 +99,8 @@ export const capacityPlanSchema = z.object({
 
 export const demoDatasetSchema = z.object({
   referenceTime: instant,
-  productionRecords: z.array(productionRecordSchema),
+  elementRecords: z.array(elementProductionRecordSchema),
+  concreteBatches: z.array(concreteBatchRecordSchema),
   deliveryNotes: z.array(deliveryNoteSchema),
   salesOrders: z.array(salesOrderSchema),
   productionOrders: z.array(productionOrderSchema),
@@ -85,7 +108,8 @@ export const demoDatasetSchema = z.object({
   capacityPlans: z.array(capacityPlanSchema),
 });
 
-export type ProductionRecord = z.infer<typeof productionRecordSchema>;
+export type ElementProductionRecord = z.infer<typeof elementProductionRecordSchema>;
+export type ConcreteBatchRecord = z.infer<typeof concreteBatchRecordSchema>;
 export type DeliveryNote = z.infer<typeof deliveryNoteSchema>;
 export type SalesOrder = z.infer<typeof salesOrderSchema>;
 export type ProductionOrder = z.infer<typeof productionOrderSchema>;
@@ -100,8 +124,8 @@ export type DemoDataset = z.infer<typeof demoDatasetSchema>;
 const trendBucketSchema = z.object({
   start: instant,
   end: instant,
-  /** null = interval not yet reached; 0 = elapsed interval with no production. */
-  volume: volume.nullable(),
+  /** Completed elements; null = interval not yet reached; 0 = elapsed with no production. */
+  pieces: count.nullable(),
 });
 
 const capacitySchema = z.object({
@@ -139,11 +163,13 @@ export const dashboardSnapshotSchema = z
     }),
     /** Activity within the selected period. */
     output: z.object({
-      concrete: z.object({
-        total: volume,
-        unit: z.literal('m3'),
+      /** Finished elements completed in the period, in whole pieces. */
+      elements: z.object({
+        total: count,
+        unit: z.literal('pieces'),
         trend: z.array(trendBucketSchema).min(1),
-        grades: z.array(z.object({ grade: z.string().min(1), volume })),
+        /** One row per product category, each exactly once. */
+        products: z.array(z.object({ category: z.enum(PRODUCT_CATEGORIES), pieces: count })),
       }),
       delivered: z.object({
         total: count,
@@ -152,7 +178,7 @@ export const dashboardSnapshotSchema = z
         documentCount: count,
       }),
     }),
-    /** Always the month containing sourceDataAsOf. */
+    /** Batching-plant concrete, always the month containing sourceDataAsOf. */
     capacity: capacitySchema,
     projects: z.array(
       z.object({
@@ -164,14 +190,18 @@ export const dashboardSnapshotSchema = z
     ),
   })
   .superRefine((s, ctx) => {
-    const totalLitres = toLitres(s.output.concrete.total);
-    const trendLitres = s.output.concrete.trend.reduce((sum, b) => sum + toLitres(b.volume ?? 0), 0);
-    const gradeLitres = s.output.concrete.grades.reduce((sum, g) => sum + toLitres(g.volume), 0);
-    if (trendLitres !== totalLitres) {
-      ctx.addIssue({ code: 'custom', path: ['output', 'concrete', 'trend'], message: 'Trend does not add up to the concrete total' });
+    const { total, trend, products } = s.output.elements;
+    const trendTotal = trend.reduce((sum, b) => sum + (b.pieces ?? 0), 0);
+    const productTotal = products.reduce((sum, p) => sum + p.pieces, 0);
+    if (trendTotal !== total) {
+      ctx.addIssue({ code: 'custom', path: ['output', 'elements', 'trend'], message: 'Trend does not add up to the produced-elements total' });
     }
-    if (gradeLitres !== totalLitres) {
-      ctx.addIssue({ code: 'custom', path: ['output', 'concrete', 'grades'], message: 'Grades do not add up to the concrete total' });
+    if (productTotal !== total) {
+      ctx.addIssue({ code: 'custom', path: ['output', 'elements', 'products'], message: 'Products do not add up to the produced-elements total' });
+    }
+    const categories = products.map((p) => p.category);
+    if (new Set(categories).size !== categories.length || categories.length !== PRODUCT_CATEGORIES.length) {
+      ctx.addIssue({ code: 'custom', path: ['output', 'elements', 'products'], message: 'Each product category must appear exactly once' });
     }
     const { plannedCapacity, percentUsed, remaining } = s.capacity;
     const capacityKnown = plannedCapacity !== null && plannedCapacity > 0;
@@ -181,7 +211,7 @@ export const dashboardSnapshotSchema = z
   });
 
 export type DashboardSnapshot = z.infer<typeof dashboardSnapshotSchema>;
-export type TrendBucket = DashboardSnapshot['output']['concrete']['trend'][number];
-export type GradeVolume = DashboardSnapshot['output']['concrete']['grades'][number];
+export type TrendBucket = DashboardSnapshot['output']['elements']['trend'][number];
+export type ProductPieces = DashboardSnapshot['output']['elements']['products'][number];
 export type MonthlyCapacity = z.infer<typeof capacitySchema>;
 export type ProjectProgress = DashboardSnapshot['projects'][number];

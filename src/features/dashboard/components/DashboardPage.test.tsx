@@ -5,11 +5,11 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { DashboardSnapshot, Period } from '../../../lib/dashboard/contracts';
 import { DashboardDataError } from '../../../lib/dashboard/errors';
-import { formatCount, formatVolume } from '../../../lib/format';
+import { formatCount } from '../../../lib/format';
 import type { DashboardDataProvider } from '../../../lib/dashboard/provider';
 import { createDemoProvider } from '../../../lib/dashboard/providers/demo';
 import { DashboardDataContext } from '../dataProvider';
-import { formatPeriodRange, PERIOD_LABELS } from '../labels';
+import { formatPeriodRange, PERIOD_LABELS, PRODUCT_LABELS } from '../labels';
 import { DashboardPage } from './DashboardPage';
 
 // Canvas charts cannot render in jsdom; keep the text alternative.
@@ -96,21 +96,26 @@ const fail = (call: Call, error: unknown = new DashboardDataError('unavailable',
 const button = (period: Period) => screen.getByRole('button', { name: PERIOD_LABELS[period] });
 const card = (title: string) => screen.getByRole('heading', { name: title }).closest('article')!;
 const status = () => screen.getByRole('status').textContent ?? '';
-const trendMeta = () => screen.getByRole('heading', { name: 'Concrete Production Trend' }).parentElement!.textContent ?? '';
-const gradeMeta = () => screen.getByRole('heading', { name: 'Production by Concrete Grade' }).parentElement!.textContent ?? '';
+const trendMeta = () => screen.getByRole('heading', { name: 'Production Trend' }).parentElement!.textContent ?? '';
+const productSection = () => screen.getByRole('heading', { name: 'Production by Product' }).closest('section')!;
+const productMeta = () => screen.getByRole('heading', { name: 'Production by Product' }).parentElement!.textContent ?? '';
 const SCOPES: Record<Period, string> = { daily: 'Selected day', weekly: 'Selected week', monthly: 'Selected month', yearly: 'Selected year' };
 
 /** Asserts that every period-dependent figure and label on screen belongs to `period`. */
 function expectShowing(period: Period) {
   const s = expected[period];
   expect(status()).toContain(`Showing ${formatPeriodRange(s)}`);
-  expect(within(card('Concrete Produced')).getByText(formatVolume(s.output.concrete.total))).toBeTruthy();
-  expect(within(card('Concrete Produced')).getByText(SCOPES[period])).toBeTruthy();
-  expect(within(card('Delivered Output')).getByText(formatCount(s.output.delivered.total))).toBeTruthy();
-  expect(within(card('Delivered Output')).getByText(`${formatCount(s.output.delivered.documentCount)} delivery notes`)).toBeTruthy();
+  expect(within(card('Produced Elements')).getByText(formatCount(s.output.elements.total))).toBeTruthy();
+  expect(within(card('Produced Elements')).getByText(SCOPES[period])).toBeTruthy();
+  expect(within(card('Delivered Element')).getByText(formatCount(s.output.delivered.total))).toBeTruthy();
+  expect(within(card('Delivered Element')).getByText(`${formatCount(s.output.delivered.documentCount)} delivery notes`)).toBeTruthy();
   expect(trendMeta()).toContain(SCOPES[period].toLowerCase());
-  expect(trendMeta()).toContain(`total ${formatVolume(s.output.concrete.total)} m³`);
-  expect(gradeMeta()).toContain(`${SCOPES[period]} · m³`);
+  expect(trendMeta()).toContain(`total ${formatCount(s.output.elements.total)} pieces`);
+  expect(productMeta()).toContain(`${SCOPES[period]} · pieces`);
+  for (const p of s.output.elements.products) {
+    const row = within(productSection()).getByText(PRODUCT_LABELS[p.category]).closest('li')!;
+    expect(row.textContent).toContain(`${formatCount(p.pieces)} pcs`);
+  }
 }
 
 /** Figures that must never change with the period. */
@@ -128,7 +133,7 @@ describe('initial load', () => {
   it('shows a loading screen without figures, then the Daily view', async () => {
     const fake = await renderDashboard({ loadDaily: false });
     expect(screen.getAllByText('Loading demo data…').length).toBeGreaterThan(0);
-    expect(screen.queryByText(formatVolume(expected.daily.output.concrete.total))).toBeNull();
+    expect(screen.queryByText(formatCount(expected.daily.output.elements.total))).toBeNull();
     await settle(fake.latest('daily'));
     expectShowing('daily');
   });
@@ -303,5 +308,19 @@ describe('demo date wording', () => {
       const main = screen.getByRole('main').textContent ?? '';
       expect(main).not.toMatch(/\btoday\b|\bnow\b|this (week|month|year)/i);
     }
+  });
+});
+
+describe('element production wording', () => {
+  it('shows element cards and the product breakdown without concrete grades or m³ outside capacity', async () => {
+    await renderDashboard();
+    expect(screen.queryByText(/Concrete Produced|Concrete Production|Concrete Grade/)).toBeNull();
+    for (const grade of ['C35', 'C40', 'C50', 'C60']) expect(screen.queryByText(grade)).toBeNull();
+    expect(within(productSection()).queryByText(/m³/)).toBeNull();
+    expect(within(card('Produced Elements')).getByText('pieces')).toBeTruthy();
+    expect(within(card('Delivered Element')).getByText('pieces')).toBeTruthy();
+    const capacity = screen.getByRole('heading', { name: 'Monthly Plant Capacity' }).closest('section')!;
+    expect(capacity.textContent).toContain('Batching plant');
+    expect(capacity.textContent).toContain('m³');
   });
 });
