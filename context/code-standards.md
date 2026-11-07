@@ -10,7 +10,7 @@ Keep all demo records synthetic; no actual confidential records in source.
 Enable strict mode.
 Use explicit period unions, units, schemas and snapshot types.
 Avoid any; validate unknown data with Zod at external boundaries.
-Handle nullable/unknown capacity and missing data explicitly.
+Handle unknown and missing data explicitly with null, never 0.
 Do not round individual records before summing; round only at presentation.
 Format m³ with up to three decimals where appropriate; counts are integers.
 
@@ -33,7 +33,7 @@ Use one timezone-aware date utility, not scattered browser-local Date calculatio
 Intervals are half-open [start, end); test records exactly on boundaries.
 Use a controllable clock in demo calculations/tests.
 Future chart buckets must not appear as real zero output.
-Use one aggregation result for cards, trend and grade mix.
+Use one aggregation result for cards, trend and project summary.
 Deduplicate document counts by stable fixture document ID.
 Define remaining quantity before classifying orders as open/active.
 Keep returned period and timestamps attached to the rendered response.
@@ -67,10 +67,11 @@ Real-data authentication is required before integration deployment, not inferred
 Build and type-check every meaningful implementation unit.
 Focused calculation checks must cover:
 - Kuwait midnight/week/month/year boundaries.
-- Period sums equal trend/grade breakdown sums.
+- Each chart series equals its product-and-unit row exactly.
 - Open orders remain snapshots across period selections.
 - Different units remain distinct.
-- Zero/unknown capacity and capacity over 100%.
+- Order versus line counts, internal document identity, and date-only versus timestamped records.
+- Project attribution, unassigned records, and project order counts that are not additive.
 - Comparison spans if comparison figures are implemented.
 UI checks cover all period controls, fullscreen fallback, initial errors, stale data and recovery.
 Inspect layout at 1920×1080 and 3840×2160; inspect smaller desktop and mobile fallback.

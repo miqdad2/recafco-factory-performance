@@ -46,11 +46,12 @@ export function createDemoProvider(options: DemoProviderOptions = {}): Dashboard
 
   return {
     scope,
-    async getSnapshot({ period }, signal) {
+    async getSnapshot({ period, project }, signal) {
       await wait(delayMs, signal);
       prepared ??= prepareDataset(parseDemoDataset(loadDataset()));
       if (signal?.aborted) throw abortError();
-      const core = buildDashboardSnapshot(prepared, period);
+      if (!prepared.projectOptions.some((o) => o.key === project)) throw new DashboardDataError('unavailable', 'Unknown project');
+      const core = buildDashboardSnapshot(prepared, period, project);
       return parseSnapshot({ ...core, source: 'demo', fetchedAt: toKuwaitIso(now()) });
     },
   };

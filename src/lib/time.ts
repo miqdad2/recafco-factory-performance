@@ -19,6 +19,8 @@ const shortDateFormat = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric',
 });
 
+const dateOnlyFormat = new Intl.DateTimeFormat('en-GB', { timeZone: KUWAIT_TIME_ZONE, day: 'numeric', month: 'short', year: 'numeric' });
+
 const monthFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: KUWAIT_TIME_ZONE,
   month: 'long',
@@ -56,6 +58,8 @@ export const formatKuwaitHour = (value: DateInput) => {
 /** "Sunday 11 October 2026" */
 export const formatKuwaitLongDate = (value: DateInput) =>
   longDateFormat.format(toDate(value)).replace(',', '');
+/** "14 Oct 2026" */
+export const formatKuwaitDateOnly = (value: DateInput) => dateOnlyFormat.format(toDate(value));
 /** "Sun 11 Oct 2026" */
 export const formatKuwaitShortDate = (value: DateInput) =>
   shortDateFormat.format(toDate(value)).replace(',', '');
@@ -71,6 +75,11 @@ export const formatKuwaitShortMonth = (value: DateInput) => shortMonthFormat.for
 export const formatKuwaitMonthYear = (value: DateInput) => monthFormat.format(toDate(value));
 /** "2026" */
 export const formatKuwaitYear = (value: DateInput) => yearFormat.format(toDate(value));
+
+const shortMonthYearFormat = new Intl.DateTimeFormat('en-GB', { timeZone: KUWAIT_TIME_ZONE, month: 'short', year: 'numeric' });
+
+/** "Oct 2026" from "2026-10" (mid-month avoids any zone edge). */
+export const formatShortMonth = (yyyyMm: string) => shortMonthYearFormat.format(new Date(`${yyyyMm}-15T12:00:00+03:00`));
 
 /** "October 2026" from "2026-10" (mid-month avoids any zone edge). */
 export const formatMonth = (yyyyMm: string) =>

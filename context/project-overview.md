@@ -2,7 +2,7 @@
 
 ## Overview
 A standalone, one-page factory performance display for RECAFCO top management.
-It will remain visible 24/7 on a large screen and present customer demand, production workload, produced elements by product, batching-plant capacity, deliveries and selected project progress.
+It will remain visible 24/7 on a large screen and present current sales orders, active production orders, produced elements and delivered elements by product and unit, a production trend, and batch-plant concrete output.
 Build an interactive demo first; integrate SAP after management approves the design and functionality.
 
 ## Goals
@@ -49,27 +49,25 @@ Use the manufacturing composition, green reference's clarity and black/gold refe
 2. Read four large headline cards and the selected date range.
 3. Select Weekly, Monthly or Yearly; period totals and charts update together.
 4. Read current order snapshots separately from period activity.
-5. Review monthly batching-plant capacity, production by product and selected project progress.
+5. Choose a project, or a product and unit on the trend; review concrete output and the project summary.
 6. Enter fullscreen if supported; automatic refresh continues.
 7. If refresh fails, keep previous figures and display their age and delayed status.
 
 ## Core metrics
-| Metric | Definition for demo | Time behaviour |
-| --- | --- | --- |
-| Current Sales Orders | Distinct non-cancelled orders with an unfulfilled quantity; fixture status rules documented | Current snapshot |
-| Active Production Orders | Distinct released, not closed/cancelled orders with remaining work | Current snapshot |
-| Produced Elements | Sum of whole pieces on completed element-production records (demo fixtures); not derived from concrete volume | Selected period |
-| Delivered Element | Sum of pieces on completed delivery notes; delivery-note count shown separately; always labelled pieces | Selected period |
-| Monthly Plant Capacity | Batching plant: planned available concrete output in m³ for the current month (illustrative) | Fixed current-month panel |
-| Capacity Used | Month-to-date batching-plant concrete output (m³) / full-month planned capacity (m³) × 100 | Current month |
-| Production by Product | Produced pieces grouped by demo product category: Hollowcore, Precast, GRC (mutually exclusive; SAP item-to-category mapping pending) | Selected period |
-| Project Progress | Demo completion percentage with fixture basis declared | Current snapshot |
+Full definitions, rules and open SAP questions: `docs/data-definitions.md`. All are proposed, pending reconciliation with real SAP data.
 
-Actual SAP production status mapping and quantity definitions must be confirmed later.
-Do not sum quantities with different units. Count of delivery notes is not delivered output.
-Capacity used is a month-to-date share of full-month capacity, not a judgement about pace or efficiency.
-If available capacity is zero or unknown, show Not available; do not divide by zero.
-Capacity can exceed 100%; preserve the true value and explain over-capacity visually.
+| Metric | Summary | Time behaviour |
+| --- | --- | --- |
+| Current Sales Orders | Distinct open sales orders with a remaining quantity | Current snapshot |
+| Active Production Orders | Released production orders with quantity remaining to produce; excludes cancelled, closed and fully completed orders | Current snapshot |
+| Produced Elements | Transaction quantities on eligible finished-product receipts, by product and unit | Selected period |
+| Delivered Elements | Eligible lines on uncancelled delivery notes, Open or Closed, by product and unit; delivery-note count is a separate caption | Selected period |
+| Production Trend | One product-and-unit row of Produced Elements over time | Selected period |
+| Concrete Output | Batch-plant concrete m³, plus reference-month-to-date | Selected period and reference month |
+| Project Summary | Activity by project, product and unit; not completion | Selected period |
+
+Everything except Concrete Output follows the selected project. Concrete Output is always All Projects.
+Never add unlike units. Count of delivery notes is not delivered output. Do not calculate delivered ÷ produced. Project order counts are not additive.
 
 ## Date and comparison rules
 - Use Asia/Kuwait for period boundaries and displayed times.
@@ -82,7 +80,7 @@ Capacity can exceed 100%; preserve the true value and explain over-capacity visu
 - Future buckets remain empty, not actual zero production.
 - If comparisons are included, compare equivalent elapsed spans in the preceding period.
 - Orders remain current snapshots for every selected period, labelled As of.
-- The capacity panel remains labelled with its month when another period is selected.
+- Concrete month-to-date remains labelled with its month when another period is selected.
 - Factory shift-day cutoffs and fiscal-year rules are later business decisions.
 
 ## Demo behaviour
@@ -93,15 +91,15 @@ All demo views show Demo data; simulated refresh must never imply a SAP connecti
 A clock is real time; historical/fixture data freshness is separately labelled.
 
 ## Scope
-In scope: one overview page, four period controls, four KPI cards, production trend, monthly capacity panel, production-by-product breakdown, four selected projects, fullscreen control, Kuwait clock and refresh/error states.
-Out of scope for this phase: live SAP access, SAP writes, order entry, finance/HR/maintenance modules, user administration, database persistence, OEE, quality and scrap calculations, public hosting of real operational data.
+In scope: one overview page, four period controls, four KPI cards, project selector, production trend with a product-and-unit selector, concrete output, project summary, fullscreen control, Kuwait clock and refresh/error states.
+Out of scope for this phase: capacity panels and project completion percentages (removed until defined), live SAP access, SAP writes, order entry, finance/HR/maintenance modules, user administration, database persistence, OEE, quality and scrap calculations, public hosting of real operational data.
 Targets and delay indicators require declared demo assumptions; do not derive them from the screenshots.
 
 ## Success criteria
 1. Overview fits 1920×1080 and 3840×2160 fullscreen at appropriate scale; actual screen details pending.
 2. Figures and chart labels are readable from the agreed viewing distance.
-3. Period totals reconcile with fixture records and chart and product subtotals.
-4. Current snapshots and fixed monthly capacity retain their correct meanings.
+3. Each chart series reconciles exactly with its Produced Elements row, and Project Summary adds up to the cards.
+4. Current snapshots and reference-month concrete retain their correct meanings.
 5. Fullscreen fallback, loading, empty, delayed and recovery states work.
 6. Production build, type checking and focused calculation/refresh checks pass.
 7. Management approves design and business definitions before live integration.

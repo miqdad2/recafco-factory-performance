@@ -1,46 +1,42 @@
 import type { DashboardSnapshot } from '../../../lib/dashboard/contracts';
 import { formatCount } from '../../../lib/format';
-import { DELIVERED_UNIT_LABELS, formatSnapshotTime, PERIOD_SCOPES, SNAPSHOT_SCOPE } from '../labels';
-import { KpiCard } from './KpiCard';
+import { formatSnapshotTime, PERIOD_SCOPES, SNAPSHOT_SCOPE } from '../labels';
+import { CountCard, QuantityCard } from './KpiCard';
 
-export function KpiCards({ snapshot }: { snapshot: DashboardSnapshot }) {
+const countText = (value: number | null) => (value === null ? null : formatCount(value));
+
+/** `selectedKey` marks the row shown in Production Trend; every row stays visible. */
+export function KpiCards({ snapshot, selectedKey }: { snapshot: DashboardSnapshot; selectedKey?: string }) {
   const { orders, output, selectedPeriod } = snapshot;
-  const snapshotTime = formatSnapshotTime(orders.asOf);
+  const snapshotTime = `as of ${formatSnapshotTime(orders.asOf)}`;
   const periodScope = PERIOD_SCOPES[selectedPeriod];
-  const notes = output.delivered.documentCount;
+  const notes = output.deliveryDocumentCount;
 
   return (
     <>
-      <KpiCard
+      <CountCard
         label="Current Sales Orders"
-        value={formatCount(orders.openSalesOrders)}
+        value={countText(orders.openSalesOrders)}
         unit="orders"
         scope={SNAPSHOT_SCOPE}
-        scopeKind="snapshot"
         caption={snapshotTime}
       />
-      <KpiCard
+      <CountCard
         label="Active Production Orders"
-        value={formatCount(orders.activeProductionOrders)}
+        value={countText(orders.activeProductionOrders)}
         unit="orders"
         scope={SNAPSHOT_SCOPE}
-        scopeKind="snapshot"
         caption={snapshotTime}
       />
-      <KpiCard
-        label="Produced Elements"
-        value={formatCount(output.elements.total)}
-        unit="pieces"
+      <QuantityCard label="Produced Elements" rows={output.rows} field="produced" selectedKey={selectedKey} scope={periodScope} stripeClass="bg-chart-blue" />
+      <QuantityCard
+        label="Delivered Elements"
+        rows={output.rows}
+        field="delivered"
+        selectedKey={selectedKey}
         scope={periodScope}
-        scopeKind="period"
-      />
-      <KpiCard
-        label="Delivered Element"
-        value={formatCount(output.delivered.total)}
-        unit={DELIVERED_UNIT_LABELS[output.delivered.unit]}
-        scope={periodScope}
-        scopeKind="period"
-        caption={`${formatCount(notes)} delivery ${notes === 1 ? 'note' : 'notes'}`}
+        stripeClass="bg-chart-teal"
+        caption={notes === null ? undefined : `${formatCount(notes)} delivery ${notes === 1 ? 'note' : 'notes'}`}
       />
     </>
   );

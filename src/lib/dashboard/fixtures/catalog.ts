@@ -2,7 +2,7 @@
  * Fixed demo reference data. Everything here is FICTIONAL and illustrative.
  * See README.md in this folder for the full list of assumptions.
  */
-import type { CapacityPlan, ProductCategory, Project } from '../contracts';
+import type { ItemRecord, ProjectRecord } from '../contracts';
 
 /**
  * Demo reference timestamp: the moment all demo data refers to ("data as of").
@@ -15,22 +15,96 @@ export const DEMO_REFERENCE_TIME = '2026-10-14T14:00:00+03:00';
 export const DEMO_DATASET_START = { year: 2026, month: 1, day: 1 } as const;
 
 export const DEMO_SEED = 20261014;
-/** Separate seed for finished-element records, so other demo records stay unchanged. */
-export const DEMO_ELEMENT_SEED = DEMO_SEED + 1;
+/** Separate seed for production receipts, so concrete and order records stay independent. */
+export const DEMO_RECEIPT_SEED = DEMO_SEED + 1;
+/** Separate seed for project references, so quantities do not depend on attribution. */
+export const DEMO_PROJECT_SEED = DEMO_SEED + 2;
+
+const item = (
+  itemCode: string,
+  description: string,
+  itemGroup: string,
+  flags: { inventoryItem?: boolean; finishedGoodsFlag: boolean; nosIsPhysicalCount?: boolean },
+): ItemRecord => ({
+  itemCode,
+  description,
+  itemGroup,
+  inventoryItem: flags.inventoryItem ?? true,
+  finishedGoodsFlag: flags.finishedGoodsFlag,
+  nosIsPhysicalCount: flags.nosIsPhysicalCount ?? false,
+  verifiedSubtype: null,
+});
 
 /**
- * Mean completed pieces per hour at full shift intensity, by product category
- * (illustrative). A full weekday produces roughly 51 Hollowcore, 30 Precast and
- * 9 GRC elements, so production exceeds deliveries over every period. Categories
- * are mutually exclusive in the demo.
+ * Fictional item master. The Finished Goods flag is deliberately inconsistent,
+ * as in the SAP examples, so the mapping rules cannot lean on it.
  */
-export const DEMO_ELEMENT_HOURLY_RATE: Record<ProductCategory, number> = {
-  hollowcore: 3.8,
-  precast: 2.2,
-  grc: 0.7,
-};
+export const DEMO_ITEMS: ItemRecord[] = [
+  item('DEMO-HCS-150', 'Hollowcore slab 150 mm', 'HOLLOWCORE', { finishedGoodsFlag: true }),
+  item('DEMO-HCS-200', 'Hollowcore slab 200 mm', 'HOLLOWCORE', { finishedGoodsFlag: false }),
+  item('DEMO-WALL-150', 'Precast wall panel', 'PRECAST', { finishedGoodsFlag: true }),
+  item('DEMO-BEAM-40', 'Precast beam', 'PRECAST', { finishedGoodsFlag: false }),
+  item('DEMO-STAIR-01', 'Precast stair flight', 'PRECAST', { finishedGoodsFlag: true, nosIsPhysicalCount: true }),
+  item('DEMO-COL-30', 'Precast column', 'PRECAST', { finishedGoodsFlag: false, nosIsPhysicalCount: true }),
+  item('DEMO-GRC-PANEL', 'GRC facade panel', 'GRC', { finishedGoodsFlag: true }),
+  item('DEMO-GRC-COPING', 'GRC coping', 'GRC', { finishedGoodsFlag: false }),
+  item('DEMO-RM-AGGREGATE', 'Aggregate 10 mm', 'RAW-MATERIAL', { finishedGoodsFlag: true }),
+  item('DEMO-STEEL-CAGE', 'Steel reinforcement cage', 'STEEL-SEMI', { finishedGoodsFlag: true }),
+  item('DEMO-BILL-ADJ', 'Billing adjustment', 'BILLING-ADJ', { inventoryItem: false, finishedGoodsFlag: false }),
+  item('DEMO-SVC-TRANSPORT', 'Transport charge', 'SERVICE', { inventoryItem: false, finishedGoodsFlag: false }),
+];
 
-/** Concrete grades of batching-plant batches (capacity records only; not shown). */
+/** Fictional project master. Codes are marked DEMO; names are invented. */
+export const DEMO_PROJECTS: ProjectRecord[] = [
+  { code: 'DEMO-P01', name: 'Coastal Residential Towers' },
+  { code: 'DEMO-P02', name: 'Ring Road Bridge Segments' },
+  { code: 'DEMO-P03', name: 'Hospital Extension Block' },
+  { code: 'DEMO-P04', name: 'School Campus Phase 2' },
+  { code: 'DEMO-P05', name: 'Logistics Warehouse Park' },
+  { code: 'DEMO-P06', name: 'Marina Car Park Deck' },
+  { code: 'DEMO-P07', name: 'Community Mosque Annex' },
+];
+
+/** Share of work per project, and the item groups each one takes. */
+export const DEMO_PROJECT_WORK: readonly { code: string; weight: number; itemGroups: readonly string[] }[] = [
+  { code: 'DEMO-P01', weight: 0.24, itemGroups: ['HOLLOWCORE', 'PRECAST', 'GRC'] },
+  { code: 'DEMO-P02', weight: 0.2, itemGroups: ['PRECAST'] },
+  { code: 'DEMO-P03', weight: 0.2, itemGroups: ['HOLLOWCORE', 'PRECAST', 'GRC'] },
+  { code: 'DEMO-P04', weight: 0.1, itemGroups: ['HOLLOWCORE', 'PRECAST'] },
+  { code: 'DEMO-P05', weight: 0.13, itemGroups: ['HOLLOWCORE', 'PRECAST'] },
+  { code: 'DEMO-P06', weight: 0.08, itemGroups: ['HOLLOWCORE'] },
+  { code: 'DEMO-P07', weight: 0.05, itemGroups: ['GRC', 'PRECAST'] },
+];
+
+/** One line of output or delivery for an eligible item. */
+export interface DemoOutputItem {
+  itemCode: string;
+  uom: string;
+  /** Mean elements received per hour at full shift intensity. */
+  hourlyRate: number;
+  /** Quantity range for one completed element, in the item's own unit. */
+  elementSize: readonly [number, number];
+  /** Quantity range for one delivery note line, in the item's own unit. */
+  deliverySize: readonly [number, number];
+}
+
+/** Hollowcore and Precast receipts carry a completion time. */
+export const DEMO_TIMED_OUTPUT: DemoOutputItem[] = [
+  { itemCode: 'DEMO-HCS-150', uom: 'm2', hourlyRate: 2.2, elementSize: [9, 14], deliverySize: [40, 150] },
+  { itemCode: 'DEMO-HCS-200', uom: 'm2', hourlyRate: 1.6, elementSize: [10, 16], deliverySize: [40, 180] },
+  { itemCode: 'DEMO-WALL-150', uom: 'm3', hourlyRate: 1.1, elementSize: [1.5, 3.5], deliverySize: [4, 14] },
+  { itemCode: 'DEMO-BEAM-40', uom: 'm3', hourlyRate: 0.6, elementSize: [0.8, 2.2], deliverySize: [2, 9] },
+  { itemCode: 'DEMO-STAIR-01', uom: 'Nos', hourlyRate: 0.3, elementSize: [1, 1], deliverySize: [1, 4] },
+  { itemCode: 'DEMO-COL-30', uom: 'Nos', hourlyRate: 0.3, elementSize: [1, 1], deliverySize: [1, 5] },
+];
+
+/** GRC receipts are date-only in the demo, so its Daily view cannot show hours. */
+export const DEMO_DATE_ONLY_OUTPUT: DemoOutputItem[] = [
+  { itemCode: 'DEMO-GRC-PANEL', uom: 'm2', hourlyRate: 0, elementSize: [8, 30], deliverySize: [10, 45] },
+  { itemCode: 'DEMO-GRC-COPING', uom: 'm2', hourlyRate: 0, elementSize: [5, 18], deliverySize: [6, 24] },
+];
+
+/** Concrete grades of batching-plant batches (recorded, not shown). */
 export const DEMO_GRADES = [
   ['C40', 0.33],
   ['C50', 0.25],
@@ -39,38 +113,3 @@ export const DEMO_GRADES = [
   ['C30', 0.08],
   ['C25', 0.05],
 ] as const;
-
-/** Fictional precast item codes used on delivery note lines. */
-export const DEMO_ITEMS = ['DEMO-HCS-200', 'DEMO-WALL-150', 'DEMO-BEAM-40', 'DEMO-COL-30', 'DEMO-STAIR-01'] as const;
-
-/**
- * Projects. Four are featured on the dashboard; three others receive deliveries
- * but are not shown. Planned pieces and opening balances are invented.
- */
-export const DEMO_PROJECTS: Project[] = [
-  { code: 'DEMO-P01', name: 'Coastal Residential Towers', featured: true, plannedPieces: 5600, openingDeliveredPieces: 1450 },
-  { code: 'DEMO-P02', name: 'Ring Road Bridge Segments', featured: true, plannedPieces: 8200, openingDeliveredPieces: 900 },
-  { code: 'DEMO-P03', name: 'Hospital Extension Block', featured: true, plannedPieces: 11400, openingDeliveredPieces: 600 },
-  { code: 'DEMO-P04', name: 'School Campus Phase 2', featured: true, plannedPieces: 3300, openingDeliveredPieces: 1250 },
-  { code: 'DEMO-P05', name: 'Logistics Warehouse Park', featured: false, plannedPieces: 4000, openingDeliveredPieces: 300 },
-  { code: 'DEMO-P06', name: 'Marina Car Park Deck', featured: false, plannedPieces: 3600, openingDeliveredPieces: 0 },
-  { code: 'DEMO-P07', name: 'Community Mosque Annex', featured: false, plannedPieces: 1500, openingDeliveredPieces: 200 },
-];
-
-/** Share of delivery notes per project. */
-export const DEMO_PROJECT_DELIVERY_WEIGHTS = [
-  ['DEMO-P01', 0.19],
-  ['DEMO-P02', 0.2],
-  ['DEMO-P03', 0.17],
-  ['DEMO-P04', 0.09],
-  ['DEMO-P05', 0.15],
-  ['DEMO-P06', 0.12],
-  ['DEMO-P07', 0.08],
-] as const;
-
-/** Illustrative monthly batch plant capacity. NOT derived from SAP "T.VOL". */
-export const DEMO_CAPACITY_PLANS: CapacityPlan[] = Array.from({ length: 12 }, (_, i) => ({
-  month: `2026-${String(i + 1).padStart(2, '0')}`,
-  plannedCapacityM3: 9000,
-  basis: 'illustrative-demo' as const,
-}));

@@ -1,146 +1,174 @@
 /**
- * Pure dashboard calculations. Every figure on the screen comes from one
- * snapshot built here from dated records, so totals, trend and product
- * breakdown always reconcile. No React, no I/O, no client clock.
+ * Pure dashboard calculations. Every figure on the screen comes from one snapshot
+ * built here from dated records, so cards, chart and table always reconcile.
+ * No React, no I/O, no client clock.
  *
- * Demo rules (assumptions, NOT confirmed SAP definitions):
- * - Period activity counts records with timestamp in [period start, as-of).
- * - Produced elements: whole pieces on completed element-production records. Each
- *   record has exactly one product category (Hollowcore, Precast or GRC), so the
- *   category totals add up to the total without double-counting.
- * - Batching-plant concrete (m³) is a separate record set used only for monthly
- *   capacity. It never enters a piece total, and pieces are never derived from it.
- * - Open sales order: status "open", posted before as-of, and at least one
- *   line with remaining pieces (ordered − delivered > 0). Closed/cancelled excluded.
- * - Active production order: status "released", created before as-of and
- *   remaining pieces (planned − completed > 0). Planned/closed/cancelled excluded.
- * - Delivered output: pieces on completed delivery notes; cancelled notes excluded.
- *   Delivery note count is reported separately and never used as output.
- * - Project completion: (opening delivered pieces + delivered pieces to as-of) ÷ planned pieces.
+ * Proposed rules (NOT confirmed SAP definitions; see docs/data-definitions.md):
+ * - Period activity counts records in [period start, as-of). Records use their
+ *   business date; a time of day is used only when it falls on that date.
+ * - Quantities are grouped by product AND unit, and summed in whole thousandths.
+ * - Produced: the transaction quantity of each eligible, uncancelled receipt line.
+ *   Cumulative completed quantities on orders are never summed.
+ * - Delivered: eligible lines of uncancelled delivery notes, whether Open or Closed.
+ *   The note count is separate, and delivery is never derived from production.
+ * - Hourly bars need a reliable time on every record for that row on that day.
+ *   Otherwise Daily shows the day's total; no hour is inferred.
+ * - Current sales order: distinct document with status open, posted before as-of,
+ *   and at least one line with ordered − delivered > 0.
+ * - Active production order: distinct document with status released, created before
+ *   as-of, and planned − completed > 0, so fully completed orders are not active
+ *   even while still released.
+ * - Project scope uses recorded references only. An order or delivery note spanning
+ *   projects counts once in All Projects and once in each project, so project counts
+ *   are not additive. Quantities are additive: each line has exactly one project.
+ * - Batching-plant concrete has no project reference and is never project-scoped.
+ * - Component issues (e.g. concrete issued to a beam order), cumulative order completion
+ *   and stock are never read as output.
  */
-import {
-  PRODUCT_CATEGORIES,
-  type CapacityPlan,
-  type ConcreteBatchRecord,
-  type DashboardSnapshot,
-  type DeliveryNote,
-  type DemoDataset,
-  type ElementProductionRecord,
-  type MonthlyCapacity,
-  type Period,
-  type ProductCategory,
-  type ProductionOrder,
-  type Project,
-  type SalesOrder,
-  type VolumeUnit,
+import type {
+  ConcreteBatchRecord,
+  ConcreteOutput,
+  DashboardSnapshot,
+  DeliveryNote,
+  DemoDataset,
+  ItemRecord,
+  Period,
+  ProductionOrder,
+  ProductionReceiptLine,
+  ProductionSeries,
+  ProjectOption,
+  ProjectSummaryRow,
+  QuantityRow,
+  SalesOrder,
 } from './contracts';
 import {
   getBuckets,
   getPeriodWindow,
   isWithin,
+  kuwaitDateStart,
   kuwaitMonthKey,
   parseInstant,
   toKuwaitIso,
   type PeriodWindow,
 } from './periods';
-import { fromLitres, toLitres } from './units';
+import { classifyLine, compareRows, EXPECTED_ROWS, rowKey, type RowIdentity } from './productMapping';
+import { ALL_PROJECTS, buildProjectOptions, inProjectScope, projectKeyOf } from './projects';
+import { fromMilli, toMilli } from './units';
 
-export const PROJECT_COMPLETION_BASIS = 'Delivered pieces ÷ planned pieces (demo)';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /* ------------------------------------------------------------------ */
 /* Prepared dataset: timestamps parsed once, records sorted by time    */
 /* ------------------------------------------------------------------ */
 
-/** A dated integer amount: pieces for elements, whole litres for concrete. */
+/** A dated integer amount in thousandths of its unit. */
 interface TimedAmount {
   atMs: number;
   amount: number;
 }
 
-export interface PreparedElement extends TimedAmount {
-  category: ProductCategory;
+/** One quantity's row, its project and any verified element count. */
+interface ScopedLine extends RowIdentity {
+  subtype: string | null;
+  project: string;
+  verifiedElementCount: number | null;
 }
 
-export type PreparedConcrete = TimedAmount;
+export interface PreparedReceipt extends TimedAmount, ScopedLine {
+  /** False when no reliable time of day exists; atMs is then the start of the date. */
+  hasTime: boolean;
+}
 
-export interface PreparedDelivery {
-  atMs: number;
-  id: string;
-  status: DeliveryNote['status'];
-  projectCode: string;
-  pieces: number;
+export interface PreparedDelivery extends TimedAmount, ScopedLine {
+  docEntry: number;
 }
 
 export interface PreparedDataset {
   referenceMs: number;
-  elements: PreparedElement[];
-  concrete: PreparedConcrete[];
+  projectOptions: ProjectOption[];
+  receipts: PreparedReceipt[];
+  concrete: TimedAmount[] | null;
   deliveries: PreparedDelivery[];
   salesOrders: SalesOrder[];
   productionOrders: ProductionOrder[];
-  projects: Project[];
-  capacityPlans: CapacityPlan[];
 }
 
 const byTime = (a: { atMs: number }, b: { atMs: number }) => a.atMs - b.atMs;
+const itemIndex = (items: readonly ItemRecord[]) => new Map(items.map((item) => [item.itemCode, item]));
 
-export function prepareElements(records: readonly ElementProductionRecord[]): PreparedElement[] {
-  return records
-    .map((r) => ({ atMs: parseInstant(r.completedAt), amount: r.pieces, category: r.productCategory }))
-    .sort(byTime);
+export function prepareReceipts(lines: readonly ProductionReceiptLine[], items: readonly ItemRecord[]): PreparedReceipt[] {
+  const itemsByCode = itemIndex(items);
+  const seen = new Set<string>();
+  const prepared: PreparedReceipt[] = [];
+  for (const line of lines) {
+    const identity = `${line.docEntry}:${line.lineNum}`;
+    if (line.cancelled || seen.has(identity)) continue;
+    seen.add(identity);
+    const result = classifyLine(itemsByCode.get(line.itemCode), line.uom, line.quantity);
+    if (result.status === 'excluded') continue;
+    const dayStart = kuwaitDateStart(line.postingDate);
+    const recordedMs = line.recordedAt === null ? null : parseInstant(line.recordedAt);
+    const hasTime = recordedMs !== null && isWithin(recordedMs, dayStart, dayStart + DAY_MS);
+    prepared.push({
+      atMs: hasTime ? recordedMs : dayStart,
+      amount: toMilli(line.quantity),
+      product: result.product,
+      unit: result.unit,
+      subtype: result.subtype,
+      project: projectKeyOf(line.projectCode),
+      verifiedElementCount: line.verifiedElementCount,
+      hasTime,
+    });
+  }
+  return prepared.sort(byTime);
 }
 
-export function prepareConcrete(records: readonly ConcreteBatchRecord[]): PreparedConcrete[] {
-  return records.map((r) => ({ atMs: parseInstant(r.producedAt), amount: toLitres(r.volumeM3) })).sort(byTime);
+export function prepareDeliveries(notes: readonly DeliveryNote[], items: readonly ItemRecord[]): PreparedDelivery[] {
+  const itemsByCode = itemIndex(items);
+  const seen = new Set<number>();
+  const prepared: PreparedDelivery[] = [];
+  for (const note of notes) {
+    if (note.cancelled || seen.has(note.docEntry)) continue;
+    seen.add(note.docEntry);
+    for (const line of note.lines) {
+      const result = classifyLine(itemsByCode.get(line.itemCode), line.uom, line.quantity);
+      if (result.status === 'excluded') continue;
+      prepared.push({
+        atMs: kuwaitDateStart(note.postingDate),
+        amount: toMilli(line.quantity),
+        product: result.product,
+        unit: result.unit,
+        subtype: result.subtype,
+        project: projectKeyOf(line.projectCode),
+        verifiedElementCount: line.verifiedElementCount,
+        docEntry: note.docEntry,
+      });
+    }
+  }
+  return prepared.sort(byTime);
 }
 
-export function prepareDeliveries(notes: readonly DeliveryNote[]): PreparedDelivery[] {
-  return notes
-    .map((n) => ({
-      atMs: parseInstant(n.deliveredAt),
-      id: n.id,
-      status: n.status,
-      projectCode: n.projectCode,
-      pieces: n.lines.reduce((sum, line) => sum + line.pieces, 0),
-    }))
-    .sort(byTime);
+export function prepareConcrete(records: readonly ConcreteBatchRecord[]): TimedAmount[] {
+  return records.map((r) => ({ atMs: parseInstant(r.producedAt), amount: toMilli(r.volumeM3) })).sort(byTime);
 }
 
 export function prepareDataset(dataset: DemoDataset): PreparedDataset {
+  const receipts = prepareReceipts(dataset.productionReceipts, dataset.items);
+  const deliveries = prepareDeliveries(dataset.deliveryNotes, dataset.items);
+  const recordedProjects = [
+    ...receipts.map((r) => r.project),
+    ...deliveries.map((d) => d.project),
+    ...dataset.salesOrders.flatMap((o) => o.lines.map((l) => projectKeyOf(l.projectCode))),
+    ...dataset.productionOrders.map((o) => projectKeyOf(o.projectCode)),
+  ];
   return {
     referenceMs: parseInstant(dataset.referenceTime),
-    elements: prepareElements(dataset.elementRecords),
-    concrete: prepareConcrete(dataset.concreteBatches),
-    deliveries: prepareDeliveries(dataset.deliveryNotes),
+    projectOptions: buildProjectOptions(dataset.projects, recordedProjects),
+    receipts,
+    concrete: dataset.concreteBatches && prepareConcrete(dataset.concreteBatches),
+    deliveries,
     salesOrders: dataset.salesOrders,
     productionOrders: dataset.productionOrders,
-    projects: dataset.projects,
-    capacityPlans: dataset.capacityPlans,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Capacity helper                                                     */
-/* ------------------------------------------------------------------ */
-
-/**
- * Month-to-date share of full-month planned capacity.
- * Zero or unknown capacity yields null rather than dividing by zero.
- * Over-capacity is preserved (percent > 100, remaining < 0).
- */
-export function capacityUsage(input: {
-  month: string;
-  plannedCapacity: number | null;
-  actualOutput: number;
-  unit: VolumeUnit;
-  basis: MonthlyCapacity['basis'];
-}): MonthlyCapacity {
-  const { plannedCapacity, actualOutput } = input;
-  const known = plannedCapacity !== null && plannedCapacity > 0;
-  return {
-    ...input,
-    remaining: known ? fromLitres(toLitres(plannedCapacity) - toLitres(actualOutput)) : null,
-    percentUsed: known ? (actualOutput / plannedCapacity) * 100 : null,
   };
 }
 
@@ -148,27 +176,20 @@ export function capacityUsage(input: {
 /* Period activity                                                     */
 /* ------------------------------------------------------------------ */
 
-export interface BucketedTotal<R extends TimedAmount> {
-  /** Integer total (pieces or litres). */
+export interface BucketedTotal {
+  /** Integer total in thousandths. */
   total: number;
   /** One entry per bucket; null = bucket starts at or after as-of (not yet reached). */
   buckets: { startMs: number; endMs: number; amount: number | null }[];
-  /** Records that fell inside the period, for further breakdowns. */
-  included: R[];
 }
 
 /**
  * Integer amounts within [window.start, min(window.end, as-of)), grouped into the
  * window's buckets. Integers keep every breakdown exactly equal to the total.
  */
-export function aggregateByBuckets<R extends TimedAmount>(
-  records: readonly R[],
-  window: PeriodWindow,
-  asOfMs: number,
-): BucketedTotal<R> {
+export function aggregateByBuckets(records: readonly TimedAmount[], window: PeriodWindow, asOfMs: number): BucketedTotal {
   const buckets = getBuckets(window).map((b) => ({ ...b, amount: b.startMs < asOfMs ? 0 : null }));
   const limit = Math.min(window.endMs, asOfMs);
-  const included: R[] = [];
   let total = 0;
   let cursor = 0;
 
@@ -179,95 +200,163 @@ export function aggregateByBuckets<R extends TimedAmount>(
     const bucket = buckets[cursor]!;
     bucket.amount = (bucket.amount ?? 0) + record.amount;
     total += record.amount;
-    included.push(record);
   }
-  return { total, buckets, included };
+  return { total, buckets };
 }
 
-/** Pieces per product category, every category exactly once in a fixed order. */
-export function piecesByProduct(elements: readonly PreparedElement[]) {
-  const totals = new Map<ProductCategory, number>(PRODUCT_CATEGORIES.map((c) => [c, 0]));
-  for (const e of elements) totals.set(e.category, totals.get(e.category)! + e.amount);
-  return PRODUCT_CATEGORIES.map((category) => ({ category, pieces: totals.get(category)! }));
+function groupByRow<T extends RowIdentity>(records: readonly T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const record of records) {
+    const key = rowKey(record.product, record.unit, record.subtype);
+    const group = groups.get(key);
+    if (group) group.push(record);
+    else groups.set(key, [record]);
+  }
+  return groups;
 }
 
-export interface DeliveryAggregate {
-  pieces: number;
-  documentCount: number;
+/** Chart series for one row. A Daily view uses hours only if every record has a reliable time. */
+function buildSeries(row: RowIdentity, receipts: readonly PreparedReceipt[], window: PeriodWindow, asOfMs: number): ProductionSeries {
+  const isDaily = window.granularity === 'hour';
+  const hourly = isDaily && receipts.length > 0 && receipts.every((r) => r.hasTime);
+  const granularity = isDaily && !hourly ? 'day' : window.granularity;
+  const { total, buckets } = aggregateByBuckets(receipts, { ...window, granularity }, asOfMs);
+  return {
+    key: rowKey(row.product, row.unit, row.subtype),
+    product: row.product,
+    unit: row.unit,
+    subtype: row.subtype ?? null,
+    granularity,
+    hourlyDetail: !isDaily ? 'not-applicable' : hourly ? 'available' : 'unavailable',
+    total: fromMilli(total),
+    trend: buckets.map((b) => ({
+      start: toKuwaitIso(b.startMs),
+      end: toKuwaitIso(b.endMs),
+      quantity: b.amount === null ? null : fromMilli(b.amount),
+    })),
+  };
 }
 
-/** Completed delivery notes within [start, min(end, as-of)); pieces and documents stay separate. */
-export function aggregateDeliveries(
+/** A verified total only when every record has a verified count; never derived. */
+function verifiedElementTotal(lines: readonly ScopedLine[]): number | null {
+  if (lines.length === 0 || lines.some((l) => l.verifiedElementCount === null)) return null;
+  return lines.reduce((sum, l) => sum + l.verifiedElementCount!, 0);
+}
+
+const sumAmounts = (records: readonly TimedAmount[]) => records.reduce((sum, r) => sum + r.amount, 0);
+
+/** Rows for the selected scope: every expected row, plus any row with records. */
+function orderedRows(...groups: Map<string, ScopedLine[]>[]): RowIdentity[] {
+  const rows = new Map<string, RowIdentity>(EXPECTED_ROWS.map((r) => [rowKey(r.product, r.unit), r]));
+  for (const group of groups) {
+    for (const [key, records] of group) rows.set(key, records[0]!);
+  }
+  return [...rows.values()].sort(compareRows);
+}
+
+/** Period activity by project, product and unit, in project-option order. */
+function buildProjectSummary(
+  receipts: readonly PreparedReceipt[],
   deliveries: readonly PreparedDelivery[],
-  window: Pick<PeriodWindow, 'startMs' | 'endMs'>,
-  asOfMs: number,
-): DeliveryAggregate {
-  const limit = Math.min(window.endMs, asOfMs);
-  const documents = new Set<string>();
-  let pieces = 0;
-  for (const note of deliveries) {
-    if (note.status !== 'completed' || !isWithin(note.atMs, window.startMs, limit)) continue;
-    if (documents.has(note.id)) continue; // a document is counted once
-    documents.add(note.id);
-    pieces += note.pieces;
+  options: readonly ProjectOption[],
+): ProjectSummaryRow[] {
+  const summary: ProjectSummaryRow[] = [];
+  for (const { key: projectKey } of options) {
+    const inProject = (r: ScopedLine) => r.project === projectKey;
+    const produced = groupByRow(receipts.filter(inProject));
+    const delivered = groupByRow(deliveries.filter(inProject));
+    const keys = new Set([...produced.keys(), ...delivered.keys()]);
+    const rows = [...keys].map((key) => ({ key, line: (produced.get(key) ?? delivered.get(key))![0]! }));
+    for (const { key, line } of rows.sort((a, b) => compareRows(a.line, b.line))) {
+      summary.push({
+        projectKey,
+        rowKey: key,
+        product: line.product,
+        unit: line.unit,
+        subtype: line.subtype,
+        produced: fromMilli(sumAmounts(produced.get(key) ?? [])),
+        delivered: fromMilli(sumAmounts(delivered.get(key) ?? [])),
+      });
+    }
   }
-  return { pieces, documentCount: documents.size };
+  return summary;
+}
+
+export function aggregateOutput(
+  data: Pick<PreparedDataset, 'receipts' | 'deliveries' | 'projectOptions'>,
+  window: PeriodWindow,
+  asOfMs: number,
+  project: string = ALL_PROJECTS,
+) {
+  const limit = Math.min(window.endMs, asOfMs);
+  const selected = (r: { atMs: number; project: string }) => isWithin(r.atMs, window.startMs, limit) && inProjectScope(project, r.project);
+  const receipts = data.receipts.filter(selected);
+  const deliveries = data.deliveries.filter(selected);
+  const produced = groupByRow(receipts);
+  const delivered = groupByRow(deliveries);
+
+  const ordered = orderedRows(produced, delivered);
+  const productionSeries = ordered.map((row) => buildSeries(row, produced.get(rowKey(row.product, row.unit, row.subtype)) ?? [], window, asOfMs));
+  const rows: QuantityRow[] = ordered.map((row, i) => {
+    const series = productionSeries[i]!;
+    const deliveredLines = delivered.get(series.key) ?? [];
+    return {
+      key: series.key,
+      product: row.product,
+      unit: row.unit,
+      subtype: series.subtype,
+      produced: series.total,
+      delivered: fromMilli(sumAmounts(deliveredLines)),
+      producedElementCount: verifiedElementTotal(produced.get(series.key) ?? []),
+      deliveredElementCount: verifiedElementTotal(deliveredLines),
+    };
+  });
+  return {
+    output: { rows, productionSeries, deliveryDocumentCount: new Set(deliveries.map((d) => d.docEntry)).size },
+    projectSummary: buildProjectSummary(receipts, deliveries, data.projectOptions),
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /* Current snapshots                                                   */
 /* ------------------------------------------------------------------ */
 
-export function countOpenSalesOrders(orders: readonly SalesOrder[], asOfMs: number): number {
-  const open = new Set<string>();
+/**
+ * Distinct orders with remaining quantity in scope. Within a project only that
+ * project's lines decide, so one order can count under several projects.
+ */
+export function countOpenSalesOrders(orders: readonly SalesOrder[], asOfMs: number, project: string = ALL_PROJECTS): number {
+  const open = new Set<number>();
   for (const order of orders) {
     if (order.status !== 'open' || parseInstant(order.postedAt) >= asOfMs) continue;
-    const hasRemaining = order.lines.some((l) => l.orderedPieces - l.deliveredPieces > 0);
-    if (hasRemaining) open.add(order.id);
+    const remaining = (l: SalesOrder['lines'][number]) =>
+      inProjectScope(project, projectKeyOf(l.projectCode)) && toMilli(l.orderedQuantity) > toMilli(l.deliveredQuantity);
+    if (order.lines.some(remaining)) open.add(order.docEntry);
   }
   return open.size;
 }
 
-export function countActiveProductionOrders(orders: readonly ProductionOrder[], asOfMs: number): number {
-  const active = new Set<string>();
+export function countActiveProductionOrders(orders: readonly ProductionOrder[], asOfMs: number, project: string = ALL_PROJECTS): number {
+  const active = new Set<number>();
   for (const order of orders) {
     if (order.status !== 'released' || parseInstant(order.createdAt) >= asOfMs) continue;
-    if (order.plannedPieces - order.completedPieces > 0) active.add(order.id);
+    if (!inProjectScope(project, projectKeyOf(order.projectCode))) continue;
+    if (toMilli(order.plannedQuantity) > toMilli(order.completedQuantity)) active.add(order.docEntry);
   }
   return active.size;
 }
 
-export function projectProgress(projects: readonly Project[], deliveries: readonly PreparedDelivery[], asOfMs: number) {
-  const deliveredByProject = new Map<string, number>();
-  const seen = new Set<string>();
-  for (const note of deliveries) {
-    if (note.status !== 'completed' || note.atMs >= asOfMs || seen.has(note.id)) continue;
-    seen.add(note.id);
-    deliveredByProject.set(note.projectCode, (deliveredByProject.get(note.projectCode) ?? 0) + note.pieces);
-  }
-  return projects
-    .filter((p) => p.featured)
-    .map((p) => ({
-      code: p.code,
-      name: p.name,
-      percentComplete: ((p.openingDeliveredPieces + (deliveredByProject.get(p.code) ?? 0)) / p.plannedPieces) * 100,
-      basis: PROJECT_COMPLETION_BASIS,
-    }));
-}
-
-/** Batching-plant concrete for the month containing as-of, against its m³ plan. */
-export function monthlyCapacity(data: PreparedDataset, asOfMs: number): MonthlyCapacity {
-  const month = kuwaitMonthKey(asOfMs);
-  const monthWindow = getPeriodWindow('monthly', asOfMs);
-  const plan = data.capacityPlans.find((p) => p.month === month);
-  const { total: litres } = aggregateByBuckets(data.concrete, monthWindow, asOfMs);
-  return capacityUsage({
-    month,
-    plannedCapacity: plan?.plannedCapacityM3 ?? null,
-    actualOutput: fromLitres(litres),
+/** Selected-period and month-to-date plant output; always All Projects, as batches name no project. */
+export function concreteOutput(concrete: PreparedDataset['concrete'], window: PeriodWindow, asOfMs: number): ConcreteOutput {
+  const sum = (w: PeriodWindow) => (concrete === null ? null : fromMilli(aggregateByBuckets(concrete, w, asOfMs).total));
+  return {
+    scope: 'all-projects',
+    periodOutput: sum(window),
+    month: kuwaitMonthKey(asOfMs),
+    monthToDate: sum(getPeriodWindow('monthly', asOfMs)),
+    monthToDateThrough: toKuwaitIso(asOfMs),
     unit: 'm3',
-    basis: plan?.basis ?? 'illustrative-demo',
-  });
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -276,16 +365,18 @@ export function monthlyCapacity(data: PreparedDataset, asOfMs: number): MonthlyC
 
 export type SnapshotCore = Omit<DashboardSnapshot, 'source' | 'fetchedAt'>;
 
-/** Builds the coherent snapshot for one period at the dataset's reference time. */
-export function buildDashboardSnapshot(data: PreparedDataset, period: Period): SnapshotCore {
+/** Builds the coherent snapshot for one period and project at the dataset's reference time. */
+export function buildDashboardSnapshot(data: PreparedDataset, period: Period, project: string = ALL_PROJECTS): SnapshotCore {
+  const selectedProject = data.projectOptions.find((o) => o.key === project);
+  if (!selectedProject) throw new RangeError(`Unknown project: ${project}`);
   const asOfMs = data.referenceMs;
   const asOf = toKuwaitIso(asOfMs);
   const window = getPeriodWindow(period, asOfMs);
-  const elements = aggregateByBuckets(data.elements, window, asOfMs);
-  const delivered = aggregateDeliveries(data.deliveries, window, asOfMs);
 
   return {
     selectedPeriod: period,
+    selectedProject,
+    projectOptions: data.projectOptions,
     range: {
       start: toKuwaitIso(window.startMs),
       end: toKuwaitIso(window.endMs),
@@ -294,24 +385,11 @@ export function buildDashboardSnapshot(data: PreparedDataset, period: Period): S
     },
     sourceDataAsOf: asOf,
     orders: {
-      openSalesOrders: countOpenSalesOrders(data.salesOrders, asOfMs),
-      activeProductionOrders: countActiveProductionOrders(data.productionOrders, asOfMs),
+      openSalesOrders: countOpenSalesOrders(data.salesOrders, asOfMs, project),
+      activeProductionOrders: countActiveProductionOrders(data.productionOrders, asOfMs, project),
       asOf,
     },
-    output: {
-      elements: {
-        total: elements.total,
-        unit: 'pieces',
-        trend: elements.buckets.map((b) => ({
-          start: toKuwaitIso(b.startMs),
-          end: toKuwaitIso(b.endMs),
-          pieces: b.amount,
-        })),
-        products: piecesByProduct(elements.included),
-      },
-      delivered: { total: delivered.pieces, unit: 'pieces', documentCount: delivered.documentCount },
-    },
-    capacity: monthlyCapacity(data, asOfMs),
-    projects: projectProgress(data.projects, data.deliveries, asOfMs),
+    ...aggregateOutput(data, window, asOfMs, project),
+    concrete: concreteOutput(data.concrete, window, asOfMs),
   };
 }

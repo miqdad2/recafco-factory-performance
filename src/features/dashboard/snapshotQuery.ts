@@ -1,16 +1,16 @@
 import { QueryClient, queryOptions } from '@tanstack/react-query';
-import type { Period } from '../../lib/dashboard/contracts';
 import { isDashboardDataError } from '../../lib/dashboard/errors';
-import type { DashboardDataProvider } from '../../lib/dashboard/provider';
+import type { DashboardDataProvider, SnapshotRequest } from '../../lib/dashboard/provider';
 
-/** One cache entry per data scope (e.g. demo reference time) and period. */
-export const snapshotQueryKey = (scope: string, period: Period) => ['dashboard', 'snapshot', { scope, period }] as const;
+/** One cache entry per data scope (source and reference time), period and project. */
+export const snapshotQueryKey = (scope: string, { period, project }: SnapshotRequest) =>
+  ['dashboard', 'snapshot', { scope, period, project }] as const;
 
-export function snapshotQueryOptions(provider: DashboardDataProvider, period: Period) {
+export function snapshotQueryOptions(provider: DashboardDataProvider, request: SnapshotRequest) {
   return queryOptions({
-    queryKey: snapshotQueryKey(provider.scope, period),
+    queryKey: snapshotQueryKey(provider.scope, request),
     // Passing the signal lets TanStack Query cancel a request nobody is waiting for.
-    queryFn: ({ signal }) => provider.getSnapshot({ period }, signal),
+    queryFn: ({ signal }) => provider.getSnapshot(request, signal),
   });
 }
 

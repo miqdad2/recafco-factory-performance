@@ -41,7 +41,7 @@ export function PeriodControls({ requested, displayed, requestState, onSelect, d
             disabled={disabled}
             onClick={() => onSelect?.(period)}
             className={[
-              'min-w-[7.5rem] rounded-control px-5 py-2.5 text-label font-semibold whitespace-nowrap motion-safe:transition-colors motion-safe:duration-200 disabled:cursor-not-allowed',
+              'min-w-[6.5rem] rounded-control px-3 py-2.5 text-label font-semibold whitespace-nowrap motion-safe:transition-colors motion-safe:duration-200 disabled:cursor-not-allowed',
               isRequested && !waiting
                 ? 'bg-accent text-white'
                 : waiting

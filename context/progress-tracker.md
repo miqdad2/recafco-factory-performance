@@ -1,9 +1,9 @@
 # Progress Tracker
 
-Last updated: 11 October 2026 (Asia/Kuwait).
+Last updated: 1 November 2026 (Asia/Kuwait).
 
 ## Current phase
-Unit 3 (working period controls) complete. Ready for Unit 4.
+Wording refinement complete, awaiting review. Unit 4 is next. Live SAP integration has not started. Earlier entries below are history: panels and rules they mention may since have been replaced.
 
 ## Current goal
 Standalone RECAFCO Factory Performance demo with a modern, readable single-screen overview.
@@ -214,6 +214,113 @@ The KPIs now count finished elements instead of concrete volume. Design, period 
 - **Browser** (headless Edge, `vite preview`): all four periods at 1920×1080 show no scroll, overflow or spill, with integer counts, readable product labels, and m³ only in the capacity panel. At 1366×768 there is no horizontal overflow. Keyboard walkthrough passes.
 - **Screenshots:** `docs/screenshots/elements/` and the updated `docs/screenshots/daily-1920x1080.png`.
 
+### Management overview update (1 Nov 2026, separate from Unit 4)
+Management wants four things clearly visible, without another SAP screen. Definitions and open questions: `docs/data-definitions.md`. Not deployed; the production server was not touched.
+
+**Replaced or removed**
+- Monthly Plant Capacity became Concrete Output: selected-period m³, month-to-date labelled with its month, "Batch plant" caption. Illustrative capacity, percentage, remaining and gauge removed.
+- Active Projects percentages removed. Production by Product removed. A Production & Delivery table (Product | Unit | Produced | Delivered) replaces them.
+- The single mixed "pieces" total is gone. "Delivered Element" is now "Delivered Elements".
+- Order cards are labelled "Current" with "as of …" (previously "Demo snapshot").
+
+**Contracts and calculations**
+- New source records: item master, receipt lines, delivery notes with Open/Closed status and a cancelled flag, and orders identified by internal `docEntry` plus displayed `docNum`.
+- `productMapping.ts`: explicit eligibility, product and unit rules, independent of the Finished Goods flag. Unmapped items and unknown units stay visible as their own rows.
+- `output.rows` is the one aggregate behind both quantity cards and the table. `output.productionSeries` has one chart series per row. Validation rejects any series that does not equal its row. Sums use whole thousandths.
+- Production sums receipt transaction quantities only, never cumulative order quantities.
+- Open delivery notes count; only cancelled notes are excluded. Billing and transport lines are excluded.
+- Date-only records: Daily shows one day total with "Hourly detail unavailable"; hours appear only if every record for that row has a time on its business date.
+- Unknown figures are null and show "Not available".
+
+**UI**
+- The Production Trend keeps its blue bars, printed values, future and zero marks, and gains a "Product and unit" selector. It now has full height beside a right column of Concrete Output and Production & Delivery.
+- m² and m³ always show one decimal so right-aligned columns line up.
+- Blue means production and teal means delivery, always with text labels. Amber is limited to the demo label and status messages.
+- Beyond four rows, cards and table tighten (table text 20 px) so six rows still fit 1080p.
+
+**Demo figures at the reference time** (date-only GRC; Precast delivered can exceed Precast produced because delivery is independent of production in a period)
+
+| Period | Produced: Hollowcore m² / Precast m³ / Precast pieces / GRC m² | Delivered: same order | Notes | Concrete m³ |
+|---|---|---|---|---|
+| Daily | 346.1 / 24.1 / 4 / 88.9 | 163.2 / 18.0 / 2 / 0.0 | 3 | 152.3 |
+| Weekly | 2,318.2 / 186.3 / 43 / 252.6 | 851.5 / 120.9 / 33 / 148.0 | 25 | 1,142.6 |
+| Monthly | 6,158.0 / 493.4 / 92 / 688.1 | 2,754.7 / 259.4 / 95 / 578.2 | 70 | 3,406.8 |
+| Yearly | 119,879.9 / 9,368.5 / 1,581 / 15,127.7 | 65,489.2 / 4,680.0 / 1,795 / 13,748.5 | 1,316 | 66,197.9 |
+
+Current Sales Orders 50; Active Production Orders 21.
+
+**Validation**: see Verification status. Screenshots: `docs/screenshots/management-overview/`.
+
+### Project view refinement (1 Nov 2026, separate from Unit 4)
+Managers can now pick a project and read its orders, quantities and trend. Definitions: `docs/data-definitions.md`. Not deployed; production services untouched.
+
+- **Project selector** beside the period buttons: searchable by name or code, default All Projects, with Unassigned last.
+- **Project scope** applies to both order counts, produced and delivered quantities, the trend and Project Summary. Concrete Output stays "All Projects" because batches have no project reference.
+- **Attribution** uses recorded references only (`projects.ts`). Sales order and delivery note lines each name a project, so a document can span projects: it counts once in All Projects and once in each project, so project order counts are not additive. Quantities are additive.
+- **Project Summary** replaces Production & Delivery. Rows are project, product and unit, with units beside every quantity. Activity only, no percentages. Row choice applies the project. Pages are height-aware, because a wrapped project name needs more room than a product row.
+- **Precast labels** are "Precast · m³" and "Precast · pieces" on cards, chart controls and Project Summary. The label form applies to all products.
+- **Prepared, unused:** `verifiedSubtype` on items and `verifiedElementCount` on lines. Rows report an element count only if every record has a verified count.
+- **Selection:** `useDashboardSelection` replaces `usePeriodSelection`. Query keys include source and reference time, period and project. Figures, chart, project name and range commit together; obsolete requests are cancelled; failures name the selection and offer Retry ("Try again" renamed).
+- **Chart:** the chosen product persists across projects and periods. With no records, the chart area says so instead of switching product. The chart is three fifths of the width (was two thirds), to give Project Summary its four columns; its height is unchanged. Yearly bar labels are 20 px. Where the shaded future area is too narrow for its label, the key names it.
+- **Demo data:** All Projects quantities and concrete are unchanged, because attribution has its own seed. Order counts at All Projects are also unchanged: 50 and 21.
+
+**SAP evidence still needed** (the display stays unit-separated until then; this blocks nothing):
+1. One precast production example recorded in m³.
+2. One precast production example recorded in Nos/pieces.
+3. Project codes, names and their transaction references.
+4. Any reliable physical element-count field.
+
+**Validation:** see Verification status. Screenshots: `docs/screenshots/project-view/`.
+
+### SAP-findings refinement (5 Nov 2026, separate from Unit 4)
+Applies four SAP screenshot examples and simplifies the right-hand panels. Not deployed or pushed; no SAP records or production services touched. DEMO DATA and "SAP not connected" remain.
+
+- **Labels:** "Precast · m³" is now "Precast volume" and "Precast · pieces" is now "Precast pieces". Cards drop redundant units from Hollowcore and GRC, since the quantity carries its unit. Chart buttons and the summary heading keep the unit ("Precast volume · m³"). The groups are never combined or converted.
+- **SAP examples A–D** are regression tests (`sapExamples.test.ts`, 12 tests), kept out of the demo dataset. The reference date is unchanged. Each test marks what the screenshot shows and what is assumed. They confirm:
+  - receipts count by transaction quantity and posting date (1 piece, not 5);
+  - order totals and component issues (3.88 m³ concrete) are never output;
+  - steel receipts in Nos are not elements;
+  - unknown items stay visible as Unmapped.
+- **Data model:** a `componentIssues` record type exists only to prove issues never count; the demo has none. Unverified Nos now reads "Nos (unverified)" in amber, as a data-quality flag.
+- **Project Summary** follows the chart's product and unit: Project | Produced | Delivered, one row per project with activity, name then code, alphabetical with Unassigned last. Row choice applies the project; a filtered view stays filtered with an explicit empty message. Pages are cut from measured row heights, which fixes the earlier 12 px overflow at its cause (rowspan cells are gone and rows never exceed the measured space). The page resets on any change of period, project or product.
+- **Concrete Output** is a compact band with "Selected <period>" and "Month to date · <month>", always "All Projects", and "not filtered by project" while a project is selected. The band freed about 53 px, so the summary shows 2–3 projects per page at 1080p (was 2).
+- **Status lines:** two lines are always reserved under the controls, so loading and failure never move the dashboard. The header is 137 px at 1080p in loading, ready and failed states (was 109–138, varying). The chart is about 28 px shorter as a result. Long names end in an ellipsis on these lines only; the full name stays in the announced text, the selector list and Project Summary.
+- **Lint:** `npm run lint` failed on 92 problems, all under the untracked `.agents/skills` folder. `.agents` is now in the existing `globalIgnores` call. `.agents`, `skills-lock.json` and all application rules are unchanged.
+
+### Readability refinement (5 Nov 2026, separate from Unit 4)
+A focused UI refinement; no SAP definitions or integration changed. Not committed, pushed or deployed. DEMO DATA and "SAP not connected" remain.
+
+- **Selected product highlight:** the chart's product-and-unit row is marked in both quantity cards (raised background, thin blue edge, `aria-current`) at the same row height. Precast volume and Precast pieces are marked separately. Nothing is filtered: every row and both order counts stay.
+- **Project Summary total:** "All projects · Produced … · Delivered …", or the selected project's name. It sums every matching project across all pages, Unassigned included, in whole thousandths. Tests show it equals the headline rows and the chart total for every period and product.
+- **Pagination wording:** "Showing 1–3 of 5 projects · Page 1 of 2", with singular, single-page and empty forms (`describePage`). Previous and Next became ◀ ▶ buttons named "Previous page" and "Next page".
+- **Auto pages** (`useAutoPages`): off by default; Start, then Pause or Resume; 15-second loop.
+  - Holds still for pointer or focus in the summary, the open project list, and loading or failure.
+  - Suspends while the tab is hidden and restarts with a fresh interval, so no pages are skipped.
+  - Manual paging stops it. A new dataset or view resets to page 1.
+  - The choice is kept across views. Automatic changes are not announced.
+- **Business meaning:** delivered above produced is shown neutrally (yearly Precast pieces: 1,581 produced, 1,795 delivered). No ratio, percentage or red/green judgement.
+- **Layout cost:** the total line and the two reserved footer lines (paging, Auto pages) take height from summary rows. At 1080p the summary shows 2–3 projects per page, unchanged from before but now with the total and controls; with long names or six product rows, 1–2.
+
+### Project selector and pagination refinement (5 Nov 2026, separate from Unit 4)
+UI only: no SAP attribution rules, data or definitions changed. Not committed, pushed or deployed.
+
+- **Ordering** (`projectSearch.ts`): All Projects pinned above a separately scrolling list, which stays visible while searching. Projects are alphabetical by displayed name, with the code as tie-breaker. Unassigned, not being a project, stays last, matching Project Summary.
+- **Search:** name or code; partial; case-insensitive; surrounding spaces ignored. Typing moves the keyboard to the first match, so Enter picks what was searched for. This fixed a bug found during the work, where Enter picked the pinned All Projects. With no results it reads "No matching projects"; All Projects stays.
+- **Options:**
+  - The name sits above the exact code; long names and codes wrap.
+  - Only the selected option has a check mark (with a blue edge); the keyboard option has a blue outline; hover is a quiet background.
+  - Targets are at least 64 px at 1080p.
+- **Behaviour:** the list stays within the viewport and scrolls vertically only. Closing in any way clears the search. Focus returns to the button after a choice or Escape. Home and End were added to the arrow keys. The closed button keeps its width; a long name ends in "…", with the full name in its accessible name and tooltip.
+- **Pagination:** labelled Previous and Next buttons replace ◀ ▶. The range and page count have their own line ("Showing 1–2 of 7 projects · Page 1 of 3"), with Auto pages and Previous and Next on the line below. Text sizes are unchanged, and Auto pages behaves as before.
+
+### Wording refinement (7 Nov 2026, separate from Unit 4)
+Two label changes; no data calculation, project filtering, SAP rule or loading and error behaviour changed. Not committed, pushed or deployed.
+
+- **Later hours:** the shaded future part of the Daily chart now reads "Later hours" (`FUTURE_LABELS` in `labels.ts`). Weekly, Monthly and Yearly keep "Not yet reached", since their future intervals are days or months. The chart tooltip, key and text alternative use the same wording. Future intervals still come from the snapshot's reference time (buckets after it are `null`), not the header clock. Elapsed zero hours remain grey "No production" marks. Unknown data, failed loads and completed periods contain no future intervals, so they never show it.
+- **Month-to-date cutoff:** the label reads "Month to date · through 14 Oct 2026". The date is generated from a new `concrete.monthToDateThrough` field, set from the same as-of time the quantity is summed to (`aggregate.ts`), so label and number cannot disagree and the live clock is never used. The selected-period figure keeps its own label ("Selected week" and so on), and the panel still reads "All Projects · batch plant". A full-period total is never labelled month to date.
+- **Layout cost:** the longer label did not fit beside the title, so the Concrete band is now two lines: the title and scope, then the two figures. Text sizes are unchanged. The band is about 17 px taller than before, so the summary shows 2 projects per page at 1080p, not 2–3.
+- **Tests:** 7 new (243 in total): month-to-date label in all four periods, cutoff taken from the data rather than the clock, unknown figure kept, "Later hours" Daily only, future wording on the chart key, and no future wording when no interval remains.
+
 ## In progress
 None.
 
@@ -224,6 +331,7 @@ None.
   - Delayed/stale state after an earlier success, and recovery.
   - Empty-period message.
   - Account for background-tab throttling.
+- **Management review** of the proposed definitions, then reconciliation with real SAP data (`docs/data-definitions.md`). Service Layer access is not yet available.
 - **Unit 5:** review. Long-session resource checks, real-screen and viewing-distance check, management review package.
 
 ## Pending behaviours (not built yet; do not demo as working)
@@ -234,38 +342,26 @@ None.
 ## Unit 3 limitations
 - The ECharts chunk is 497 kB minified, only 3 kB under Vite's 500 kB warning. Any further ECharts feature will trigger the warning; the remedy would be lazy-loading the chart rather than raising the limit.
 - The yearly axis shows "Sept" because that is the en-GB short-month form from Intl.
-- At 1366×768 the Delivered Output caption and some project names wrap onto two lines. This is readable and the page scrolls vertically as allowed.
+- At 1366×768 the card chip and caption stack onto two lines. This is readable and the page scrolls vertically as allowed.
 - Not yet checked: screen-reader output with real assistive technology (only the ARIA roles and attributes were checked), mobile width, long sessions.
 
-## Unit 2 demo assumptions (illustrative, not SAP definitions)
+## Demo assumptions (illustrative, not SAP definitions)
 - Reference timestamp: **Wed 14 Oct 2026, 14:00 Asia/Kuwait** (`fixtures/catalog.ts`). It is separate from the live clock and from `fetchedAt`.
-- Records are fictional, prefixed `DEMO-` / "Demo Customer". Seed `20261014`.
-- Factory pattern:
-  - Production Sunday–Thursday about 05:00–23:00 plus 00:00–02:00 night batches; Saturday morning only; Friday off.
-  - 02:00–05:00 is never scheduled, and about 5% of hours are random stoppages.
-  - Output varies by season.
-- Order rules:
-  - Open sales order = status open + posted before the reference time + some line with ordered − delivered > 0.
-  - Active production order = status released + created before the reference time + planned − completed > 0.
-- Delivered Output = pieces on completed delivery notes (cancelled excluded). The note count is a separate measure.
-- Project completion = (opening delivered + delivered to the reference time) ÷ planned pieces.
-- Capacity: illustrative 9,000 m³ per month. Actual output is the reference month's production from the same records.
-- Figures at the reference time:
-  - Daily: 152.3 m³ and 21 pieces on 3 notes.
-  - Weekly: 1,142.6 m³. Monthly: 3,406.8 m³ (capacity 37.9%). Yearly: 66,197.9 m³.
-  - 43 open sales orders and 25 active production orders.
-  - Projects: 80%, 48%, 27%, 83%.
-- Trend bar labels show whole m³; totals show one decimal.
+- Records are fictional. Seed `20261014`. Generation details: `src/lib/dashboard/fixtures/README.md`.
+- Trend bar labels show whole numbers, with one decimal below 10; totals show one decimal.
 - The header uses the supplied RECAFCO logo (`recafco-logo.png`), cropped and resized to `public/brand/recafco-logo.png` (480×373). It sits on a white tile so the dark-grey Arabic wordmark stays readable on the navy theme (11 Oct 2026).
 
 ## Proposed choices awaiting review
 - Screen title: RECAFCO Factory Performance.
 - Navy theme with red brand accent.
 - Initial selection: Daily.
-- Four headline cards, with capacity in its own large panel.
+- Four headline cards, trend at three fifths, Concrete Output above Project Summary at two fifths.
+- Project order counts: a document counts once in each project it touches.
+- A sales order counts in a project only if that project's lines have remaining quantity.
 - Sunday-start week; calendar months/years; Kuwait midnight boundaries.
 - 60-second refresh.
-- Delivered output measured in precast pieces for initial demo.
+- Active Production Orders definition: released with quantity remaining (pending SAP reconciliation).
+- GRC date-only in the demo, to show the Hourly detail unavailable state.
 These can be changed without implying prior management approval.
 
 ## Open questions
@@ -279,15 +375,11 @@ These can be changed without implying prior management approval.
 - Which SAP item groups, item codes or UDFs map items to Hollowcore, Precast and GRC? Can any item belong to more than one category?
 - Which SAP document marks a finished element as completed (receipt from production, production order completion or a custom report), and which timestamp should be used?
 - Should produced-element counts include rejected or reworked pieces?
-- Is "Delivered Element" the agreed final wording (singular), or should it read "Delivered Elements"?
 - How are existing cockpit card values calculated and filtered?
 - Which sales order lines/statuses constitute outstanding factory demand?
 - Which SAP production statuses and remaining-quantity rules define active orders?
-- Should deliveries show pieces, m³, document count, or separately labelled quantities?
-- One batching plant or several? What is each planned monthly capacity?
-- Does capacity use scheduled shifts/hours, rated throughput and downtime?
 - Factory week start, shift-day cutoff and fiscal/calendar year?
-- Basis of project completion; which four projects should be selected?
+- SAP field and rule questions are listed in `docs/data-definitions.md`.
 - Are targets and meaningful prior-period comparisons required?
 
 ### Later integration and access
@@ -307,7 +399,7 @@ These can be changed without implying prior management approval.
 - Production frontend is static dist/ served by an internal web server; Vite preview is local verification only.
 - NestJS collector and SAP connector are future work after approval.
 - Real SAP credentials never reach the display browser.
-- Monthly capacity stays explicit; period changes do not redefine current snapshots.
+- Period changes do not redefine current snapshots.
 - Unit 1: TanStack Query and Zod deferred to Unit 2 (added in Unit 2).
 - Unit 2: Kuwait period maths uses a fixed UTC+03:00 offset (Kuwait has no daylight saving), verified against Intl. Display formatting uses Intl with Asia/Kuwait.
 - Unit 2: volumes are summed in whole litres (0.001 m³) for exact reconciliation; m³ is converted only after summing.
@@ -322,6 +414,59 @@ These can be changed without implying prior management approval.
 - Unit 1: no shadcn/ui or Lucide added yet; plain semantic buttons suffice. Revisit if fullscreen/icon controls need them.
 
 ## Verification status
+- Wording refinement (7 Nov 2026):
+  - Full `npm run lint`, `npm run typecheck` and `npm run build`: see the final run recorded in the report; `npm test`: 243 tests pass in 14 files.
+  - Browser (headless Edge over the DevTools protocol, `vite preview`): every period, product and summary page, project, Unassigned, empty states, loading and Auto pages. 48, 48 and 47 states at 1920×1080, 3840×2160 and 1366×768: no page scroll at 1080p or 4K, no horizontal overflow, nothing outside or cut off in a panel.
+  - The first attempt put the longer label in a single-row band. The existing overflow check caught it clipping at 1366×768, and at 1080p the title wrapped onto two lines. Both led to the two-line layout.
+  - Stress run with a temporary provider (80-character name, SAP-style code, unmapped rows, failing project), restored afterwards (no TEMP markers): no violations; the header is identical while loading, ready and failed.
+  - Not checked: a physical display, a real screen reader, and the label against a live clock after midnight (the demo reference date is fixed).
+- Project selector and pagination refinement (5 Nov 2026):
+  - Full `npm run lint`: exit 0. `npm run typecheck`: pass. `npm run build`: pass, no chunk warning.
+  - `npm test`: 236 tests pass in 14 files (12 new):
+    - 11 selector tests: ordering and tie-break, pinned All Projects, partial and code search with spaces, no results, single check mark, keyboard with hover kept separate, Enter, Escape and focus return, search cleared on reopen and on outside click, full long name in the accessible name.
+    - 1 dashboard test: choosing All Projects returns every figure to All Projects.
+    - All earlier switching, cancellation, failure and Auto pages tests still pass.
+  - Browser (headless Edge over the DevTools protocol, `vite preview`), with a temporary provider for an 80-character name and an SAP-style code, restored afterwards. At 1920×1080, 3840×2160 and 1366×768:
+    - The list is inside the viewport and scrolls vertically, with no sideways scroll and no option overflow; the smallest target is 64 / 129 / 52 px.
+    - The code search "80067" found the SAP-style code. "zzz" showed "No matching projects", with All Projects still listed.
+    - Escape closed the list and returned focus to the button, and reopening showed an empty search.
+    - A keyboard choice updated the button and status line, and choosing All Projects restored "Showing All Projects".
+    - No page overflow at 1080p or 4K.
+  - Full dashboard regression with the new pager: 41, 40 and 31 states at the three sizes, with no page scroll at 1080p or 4K, no horizontal overflow, and nothing outside or cut off in a panel.
+  - Not checked: a real screen reader, touch screens, a physical display.
+- Readability refinement (5 Nov 2026):
+  - Full `npm run lint`: exit 0, no problems. `.agents` is still in `globalIgnores`; the folder, `skills-lock.json` and all application rules are unchanged.
+  - `npm run typecheck`: pass. `npm run build`: pass, no chunk warning.
+  - `npm test`: 224 tests pass in 13 files (28 new): highlight, totals across pages and reconciliation, pagination wording, Auto pages (default off, 15 s loop, pause and resume, pointer, focus, held by the screen, manual stop, no announcements), hidden tab, timer and listener cleanup. All earlier switching, cancellation and failure tests still pass.
+  - Browser (headless Edge over the DevTools protocol, `vite preview`): every period, every product, every summary page, a project, Unassigned, no-production and empty states, loading, and Auto pages on. 41, 40 and 31 states at 1920×1080, 3840×2160 and 1366×768. No page scroll at 1080p or 4K, no horizontal overflow, nothing outside its panel. A new check also covers text cut off with an ellipsis inside panels. It found the selected project's name cut in the total line, which was fixed so the name wraps.
+  - Stress run with a temporary provider (80-character name, SAP-style code, unmapped and unverified rows, failing project), restored afterwards: no violations. The header is identical while loading, ready and failed at all three sizes.
+  - The rotation's 15-second timing, pauses and hidden-tab rule are verified by fake-timer tests. In the browser, only the running state and its indicator were observed; a full 15-second turn was not watched.
+  - Not checked: real SAP data, real assistive technology, a physical screen, long sessions with Auto pages running.
+- SAP-findings refinement (5 Nov 2026):
+  - `npm run lint` (full `eslint .`): exit 0, no problems (was 92). `npm run typecheck`: pass. `npm test`: 196 tests pass in 11 files. `npm run build`: pass, no chunk warning.
+  - Browser (headless Edge over the DevTools protocol, `vite preview`). Every period, every chart series and every Project Summary page were checked, plus a project at Yearly, the no-production and empty-summary states, and loading. No page scroll at 1920×1080 or 3840×2160, no horizontal overflow at any size, and no visible content beyond its panel. Tables were included in the check, which was not relaxed: 39, 38 and 45 states at 1920×1080, 3840×2160 and 1366×768.
+  - The header is the same height while loading and ready at all three sizes.
+  - Temporary stress provider, restored afterwards (no TEMP markers, rebuilt): an 80-character project name, an SAP-style code missing from the master, unmapped and unverified-unit rows, and a failing project. No violations, and the header is identical while loading, ready and failed. With six product rows the summary fits 1–2 projects per page at 1080p.
+  - Not checked: real SAP data (no Service Layer access), real assistive technology, a physical screen, long sessions.
+- Project view refinement (1 Nov 2026):
+  - `npm test`: 177 tests pass in 10 files. Type check and build pass, with no chunk warning.
+  - Tests cover project attribution, distinct order counts and non-additive project counts, mixed units, unassigned records, unlisted project codes, project and period switching, cancellation of rapid selections, failure and Retry, no-production, pagination, empty state, and reconciliation of cards, chart and Project Summary for every project and period.
+  - Lint: `npx eslint src vite.config.ts vitest.config.ts eslint.config.js` passes. `npm run lint` (`eslint .`) exits 1, and all 92 reported lines are in `.agents/skills/stageshow/`, an untracked skill folder that appeared during this session. It was left alone, and neither it nor the ESLint config was changed. Add `.agents` to the ESLint ignores, or remove the folder, to clear it.
+  - Browser (headless Edge over the DevTools protocol against `vite preview`): all four periods, plus a project at Yearly and Daily, with every Project Summary page stepped through.
+    - 1920×1080 and 3840×2160: no page scroll, no horizontal overflow, nothing outside its panel. One page per period reports a table scroll height about 12 px over its box from a wrapped project name; the screenshot shows nothing clipped or colliding.
+    - 1366×768: vertical scroll only, no horizontal overflow. Some labels wrap onto two lines.
+    - Selector search, Escape and focus return work. The no-production message shows and the chart keeps its product.
+  - Temporary provider, restored afterwards (no TEMP markers, rebuilt): six product rows with an unmapped item and an unverified unit, a failing project and loading, at 1920×1080 and 3840×2160. All fit. The failure message wraps to two lines, moving the page down about 26 px at 1080p until resolved.
+  - Not checked: real SAP data (no access), real assistive technology, a physical screen, long sessions.
+- Management overview update (1 Nov 2026):
+  - `npm test`: 130 tests pass in 8 files. `npm run typecheck`, `npm run lint` and `npm run build` pass, with no chunk warning.
+  - Tests cover separation of units; chart, table and card reconciliation; transaction versus cumulative quantities; order versus line counts and internal identity; fully produced but released orders; Open delivery documents; date-only versus timestamped records; unmapped items, unknown units and unverified Nos; unknown versus zero; period switching, cancellation and failure.
+  - Browser (headless Edge over the DevTools protocol against `vite preview`), all four periods, measured and screenshots reviewed:
+    - 1920×1080 and 3840×2160: no scroll, no horizontal overflow, no spill.
+    - 1366×768: vertical scroll only, no horizontal overflow.
+    - GRC Daily shows one bar and "Hourly detail unavailable". Keyboard Tab and Enter work on the selector, with focus kept.
+  - Temporary provider, restored afterwards (no TEMP markers, rebuilt): six rows with an unmapped item and an unverified unit (Daily and Yearly, the widest figures), a failed selection and loading, at 1920×1080 and 3840×2160. All fit without scroll or spill. More than six rows would need a further layout decision.
+  - Not checked: real SAP data (no access), real assistive technology, a physical screen, long sessions.
 - Documentation consistency review: completed. No remaining Next.js directive found; only historical references to its replacement.
 - Unit 1 (11 Oct 2026): `npm run typecheck` pass; `npm run lint` pass; `npm test` pass (6 tests: sum skips future buckets, capacity %, zero/unknown capacity → null, over-capacity preserved, sample totals reconcile with trend and grade sums, units distinct); `npm run build` pass (JS 709 kB / 234 kB gzip, mostly ECharts).
 - Unit 1 browser check (headless Edge screenshots of `vite preview`): 1920×1080 fits with no scrolling, no clipping; 3840×2160 identical layout at 2× scale, no scrolling; 1366×768 one header row, no horizontal overflow, scrolls vertically to show grade/projects/footer (allowed). Trend and gauge size to their panels. Real-screen/viewing-distance check still pending.
@@ -383,6 +528,12 @@ These can be changed without implying prior management approval.
 - Deployment: not attempted.
 
 ## Session notes
+7 Nov 2026: wording refinement (Later hours, explicit month-to-date cutoff) built locally. Not committed, pushed or deployed.
+5 Nov 2026: project selector and pagination refinement built locally. Not committed, pushed or deployed.
+5 Nov 2026: readability refinement (highlight, totals, paging wording, Auto pages) built locally. Not committed, pushed or deployed.
+5 Nov 2026: SAP-findings refinement built locally from four screenshot examples. Not committed, pushed or deployed. Live SAP integration not started; the examples confirm specific rules only, and general mappings remain proposed.
+1 Nov 2026: project view refinement built locally. Not committed, pushed or deployed. Attribution rules are proposed; no SAP evidence has been received.
+1 Nov 2026: management overview update built locally. Not committed, pushed or deployed. Definitions are proposed, pending SAP reconciliation.
 The user requested project-specific versions of seven generic Markdown templates.
 The supporting screenshots are references, not validated data mappings.
 Historical production figures refer to 25 June 2026; do not present them as current data.

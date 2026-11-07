@@ -1,19 +1,19 @@
 import { initialFailureText } from '../labels';
-import { usePeriodSelection } from '../usePeriodSelection';
+import { useDashboardSelection } from '../useDashboardSelection';
 import { DashboardPlaceholder } from './DashboardPlaceholder';
 import { DashboardScreen } from './DashboardScreen';
 
 export function DashboardPage() {
-  const selection = usePeriodSelection('daily');
+  const selection = useDashboardSelection('daily');
 
   switch (selection.status) {
     case 'loading':
-      return <DashboardPlaceholder mode="loading" selectedPeriod={selection.requested} />;
+      return <DashboardPlaceholder mode="loading" selectedPeriod={selection.requested.period} />;
     case 'error':
       return (
         <DashboardPlaceholder
           mode="error"
-          selectedPeriod={selection.requested}
+          selectedPeriod={selection.requested.period}
           message={initialFailureText(selection.error)}
           onRetry={selection.retry}
         />

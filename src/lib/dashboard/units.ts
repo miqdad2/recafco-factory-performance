@@ -1,8 +1,8 @@
 /**
- * Batching-plant concrete volumes carry at most three decimals (0.001 m³ = 1 litre),
- * matching the SAP report precision. Sums are done in whole litres so the monthly
- * capacity figures are exact; m³ values are derived only from those integer sums.
- * Finished elements are whole pieces and need no conversion.
+ * Source quantities carry at most three decimals (matching the SAP report precision).
+ * Sums are done in whole thousandths so every row, series and total is exact;
+ * display values are derived only from those integer sums.
+ * This is arithmetic only: it never converts between units.
  */
-export const toLitres = (m3: number): number => Math.round(m3 * 1000);
-export const fromLitres = (litres: number): number => litres / 1000;
+export const toMilli = (quantity: number): number => Math.round(quantity * 1000);
+export const fromMilli = (milli: number): number => milli / 1000;

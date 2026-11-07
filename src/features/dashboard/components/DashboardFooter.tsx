@@ -11,8 +11,8 @@ interface DashboardFooterProps {
 
 /**
  * Three distinct facts: the data source, the time the figures refer to, and when
- * the display last loaded them. Panel-level "illustrative"/"demo" notes cover
- * capacity and projects, so they are not repeated here.
+ * the display last loaded them. The live clock and reporting dates are shown
+ * separately in the header.
  */
 export function DashboardFooter({ source, sourceDataAsOf, fetchedAt }: DashboardFooterProps) {
   const isDemo = source === 'demo';

@@ -54,6 +54,18 @@ export function kuwaitMonthKey(instantMs: number): string {
   return `${c.year}-${pad(c.month)}`;
 }
 
+/** "2026-10-14" */
+export function kuwaitDateKey(instantMs: number): string {
+  const c = toKuwaitCivil(instantMs);
+  return `${c.year}-${pad(c.month)}-${pad(c.day)}`;
+}
+
+/** Start of a Kuwait business date given as "2026-10-14". */
+export function kuwaitDateStart(date: string): number {
+  const [year, month, day] = date.split('-').map(Number);
+  return kuwaitInstant(year!, month!, day!);
+}
+
 export function parseInstant(iso: string): number {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) throw new RangeError(`Invalid timestamp: ${iso}`);

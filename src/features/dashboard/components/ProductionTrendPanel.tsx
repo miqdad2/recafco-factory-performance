@@ -3,38 +3,38 @@ import { EChart } from '../../../components/charts/EChart';
 import type { EChartsCoreOption } from '../../../components/charts/echarts';
 import { Panel } from '../../../components/ui/Panel';
 import { useRootFontSize } from '../../../hooks/useRootFontSize';
-import type { BucketGranularity, Period, TrendBucket } from '../../../lib/dashboard/contracts';
-import { formatCount } from '../../../lib/format';
+import type { Period, ProductionSeries, QuantityUnit } from '../../../lib/dashboard/contracts';
+import { formatCount, formatQuantity } from '../../../lib/format';
 import { cssVar } from '../../../styles/tokens';
-import { planValueLabels, type ChartBucket, type LegendItem, type ValueLabelPlan } from '../chartLabels';
-import { formatBucketLabel, PERIOD_SCOPES, TREND_INTERVAL_LABELS } from '../labels';
+import { MIN_LABELLED_FUTURE, planValueLabels, type ChartBucket, type LegendItem, type ValueLabelPlan } from '../chartLabels';
+import type { ChosenSeries } from '../chartSeries';
+import { formatBucketLabel, formatQuantityWithUnit, FUTURE_LABELS, formatSeriesName, formatUnit, PERIOD_SCOPES, TREND_INTERVAL_LABELS } from '../labels';
 
 interface ProductionTrendPanelProps {
-  /** Completed finished elements per interval, in whole pieces. */
-  trend: TrendBucket[];
-  total: number;
-  granularity: BucketGranularity;
+  /** One series per product and unit; only one is drawn at a time. */
+  series: ProductionSeries[];
   period: Period;
-  /** Demo reference time; identifies the in-progress interval among the buckets. */
+  /** Source as-of time; identifies the in-progress interval among the buckets. */
   asOf: string;
+  projectName: string;
+  /** The product and unit shown; shared with Project Summary. */
+  selected: ChosenSeries;
+  onSelect: (series: ChosenSeries) => void;
 }
-
-const UNIT = 'pieces';
 
 /** Axis label cadence: every other hour (Daily) or day (Monthly); every label otherwise. */
 const AXIS_LABEL_INTERVAL: Record<Period, number> = { daily: 1, weekly: 0, monthly: 1, yearly: 0 };
-
-const pieces = (n: number) => `${formatCount(n)} ${n === 1 ? 'piece' : UNIT}`;
 
 interface OptionInput {
   labels: string[];
   buckets: ChartBucket[];
   plan: ValueLabelPlan;
   period: Period;
+  unit: QuantityUnit;
   rem: number;
 }
 
-function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChartsCoreOption {
+function buildOption({ labels, buckets, plan, period, unit, rem }: OptionInput): EChartsCoreOption {
   const ink = cssVar('--text-primary');
   const muted = cssVar('--text-secondary');
   const line = cssVar('--border-default');
@@ -49,6 +49,7 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
   const firstFuture = buckets.findIndex((b) => b.value === null);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const fontSize = rem * 1.375;
+  const futureCount = buckets.filter((b) => b.value === null).length;
 
   return {
     animation: !reduceMotion,
@@ -63,7 +64,7 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
       backgroundColor: cssVar('--bg-raised'),
       borderColor: line,
       textStyle: { color: ink, fontSize },
-      valueFormatter: (v: unknown) => (typeof v === 'number' ? pieces(v) : 'Not yet reached'),
+      valueFormatter: (v: unknown) => (typeof v === 'number' ? formatQuantityWithUnit(v, unit) : FUTURE_LABELS[period]),
     },
     xAxis: {
       type: 'category',
@@ -74,11 +75,11 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
     },
     yAxis: {
       type: 'value',
-      name: UNIT,
+      name: formatUnit(unit),
       nameGap: rem * 1.25,
       nameTextStyle: { color: muted, fontSize, fontWeight: 600, align: 'left' },
       // Whole pieces only: no fractional ticks.
-      minInterval: 1,
+      minInterval: unit === 'pieces' ? 1 : undefined,
       splitNumber: 3,
       axisLabel: { color: muted, fontSize, formatter: (v: number) => formatCount(v) },
       splitLine: { lineStyle: { color: line, opacity: 0.7 } },
@@ -86,7 +87,7 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
     series: [
       {
         type: 'bar',
-        name: 'Elements produced',
+        name: 'Produced',
         data: values,
         barMaxWidth: rem * 3,
         barCategoryGap: '32%',
@@ -98,7 +99,8 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
           position: 'top',
           distance: rem * 0.375,
           color: ink,
-          fontSize,
+          // Twelve five-digit values need a little less width to stay apart.
+          fontSize: period === 'yearly' ? rem * 1.25 : fontSize,
           fontWeight: 700,
           formatter: ({ dataIndex }: { dataIndex: number }) => plan.texts[dataIndex] ?? '',
         },
@@ -108,8 +110,8 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
             ? {
                 silent: true,
                 itemStyle: { color: cssVar('--bg-raised'), opacity: 0.75 },
-                label: { position: 'inside', color: muted, fontSize, fontWeight: 600 },
-                data: [[{ name: 'Not yet reached', xAxis: firstFuture }, { xAxis: values.length - 1 }]],
+                label: { show: futureCount >= MIN_LABELLED_FUTURE, position: 'inside', color: muted, fontSize, fontWeight: 600 },
+                data: [[{ name: FUTURE_LABELS[period], xAxis: firstFuture }, { xAxis: values.length - 1 }]],
               }
             : undefined,
       },
@@ -117,10 +119,10 @@ function buildOption({ labels, buckets, plan, period, rem }: OptionInput): EChar
   };
 }
 
-function describe(labels: string[], buckets: ChartBucket[], intro: string, total: number): string {
-  const reached = buckets.flatMap((b, i) => (b.value === null ? [] : [`${labels[i]} ${formatCount(b.value)}`]));
+function describe(labels: string[], buckets: ChartBucket[], name: string, intro: string, total: string, unit: QuantityUnit, period: Period): string {
+  const reached = buckets.flatMap((b, i) => (b.value === null ? [] : [`${labels[i]} ${formatQuantity(b.value, unit)}`]));
   const hasFuture = buckets.some((b) => b.value === null);
-  return `${intro}, total ${pieces(total)} produced: ${reached.join(', ')}.${hasFuture ? ' Later intervals not yet reached.' : ''}`;
+  return `${name}, ${intro}, total ${total} produced: ${reached.join(', ')}.${hasFuture ? ` ${FUTURE_LABELS[period]}: not yet occurred at the reference time.` : ''}`;
 }
 
 function LegendSwatch({ kind }: { kind: LegendItem['kind'] }) {
@@ -129,37 +131,107 @@ function LegendSwatch({ kind }: { kind: LegendItem['kind'] }) {
   return null;
 }
 
-export function ProductionTrendPanel({ trend, total, granularity, period, asOf }: ProductionTrendPanelProps) {
+const LEGEND_TEXT: Record<LegendItem['kind'], string> = {
+  emphasis: 'text-ink',
+  note: 'text-ink',
+  zero: 'text-ink-muted',
+  status: 'font-semibold text-warning',
+};
+
+interface SeriesSelectorProps {
+  series: ProductionSeries[];
+  selected: string;
+  onSelect: (series: ProductionSeries) => void;
+}
+
+/** Real buttons, like the period controls, so one press changes the chart. */
+function SeriesSelector({ series, selected, onSelect }: SeriesSelectorProps) {
+  return (
+    <div role="group" aria-labelledby="trend-series-label" className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <span id="trend-series-label" className="mr-1 text-support text-ink-muted">
+        Product and unit
+      </span>
+      {series.map((s) => {
+        const isSelected = s.key === selected;
+        return (
+          <button
+            key={s.key}
+            type="button"
+            aria-pressed={isSelected}
+            onClick={() => onSelect(s)}
+            className={[
+              'rounded-control border-2 px-3.5 py-1 text-support font-semibold whitespace-nowrap motion-safe:transition-colors motion-safe:duration-200',
+              isSelected ? 'border-chart-blue bg-chart-blue text-[var(--bg-base)]' : 'border-line text-ink-muted hover:bg-raised hover:text-ink',
+            ].join(' ')}
+          >
+            {formatSeriesName(s)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrendChart({ series, period, asOf }: { series: ProductionSeries; period: Period; asOf: string }) {
   const rem = useRootFontSize();
-  const buckets = useMemo<ChartBucket[]>(() => trend.map((b) => ({ start: b.start, end: b.end, value: b.pieces })), [trend]);
+  const { trend, granularity, unit } = series;
+  const dayTotal = series.hourlyDetail === 'unavailable';
+  const buckets = useMemo<ChartBucket[]>(() => trend.map((b) => ({ start: b.start, end: b.end, value: b.quantity })), [trend]);
   const labels = useMemo(() => trend.map((b) => formatBucketLabel(b.start, granularity, period)), [trend, granularity, period]);
-  const plan = useMemo(() => planValueLabels(buckets, period, asOf, UNIT), [buckets, period, asOf]);
-  const option = useMemo(() => buildOption({ labels, buckets, plan, period, rem }), [labels, buckets, plan, period, rem]);
-  const intro = `${TREND_INTERVAL_LABELS[granularity]} · ${PERIOD_SCOPES[period].toLowerCase()}`;
+  const plan = useMemo(() => planValueLabels(buckets, period, asOf, unit, dayTotal), [buckets, period, asOf, unit, dayTotal]);
+  const option = useMemo(() => buildOption({ labels, buckets, plan, period, unit, rem }), [labels, buckets, plan, period, unit, rem]);
+  const intro = `${dayTotal ? 'Day total' : TREND_INTERVAL_LABELS[granularity]} · ${PERIOD_SCOPES[period].toLowerCase()}`;
+
+  return (
+    <>
+      <EChart
+        option={option}
+        ariaLabel={describe(labels, buckets, formatSeriesName(series), intro, formatQuantityWithUnit(series.total, unit), unit, period)}
+        className="h-[22rem] w-full lg:h-auto lg:min-h-0 lg:flex-1"
+      />
+      {plan.legend.length > 0 && (
+        <ul className="mt-1 flex flex-wrap gap-x-8 gap-y-1 text-support">
+          {plan.legend.map((item) => (
+            <li key={item.kind} className={`flex items-center gap-2 ${LEGEND_TEXT[item.kind]}`}>
+              <LegendSwatch kind={item.kind} />
+              {item.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+export function ProductionTrendPanel({ series, period, asOf, projectName, selected, onSelect }: ProductionTrendPanelProps) {
+  // The choice survives project and period changes: figures and chart always derive
+  // from this one series, and it never silently switches to another product.
+  const shown = series.find((s) => s.key === selected.key);
+  const hasOutput = shown !== undefined && shown.total > 0;
+  const scope = PERIOD_SCOPES[period].toLowerCase();
 
   return (
     <Panel
       title="Production Trend"
       meta={
         <>
-          {intro} · total <span className="text-label font-bold text-ink">{pieces(total)}</span>
+          {projectName} · {shown ? `${shown.hourlyDetail === 'unavailable' ? 'Day total' : TREND_INTERVAL_LABELS[shown.granularity]} · ${scope}` : scope}
+          {shown && (
+            <>
+              {' '}
+              · total <span className="text-label font-bold text-ink">{formatQuantityWithUnit(shown.total, shown.unit)}</span>
+            </>
+          )}
         </>
       }
     >
-      <EChart
-        option={option}
-        ariaLabel={describe(labels, buckets, intro, total)}
-        className="h-[22rem] w-full lg:h-auto lg:min-h-0 lg:flex-1"
-      />
-      {plan.legend.length > 0 && (
-        <ul className="mt-1 flex flex-wrap gap-x-8 gap-y-1 text-support">
-          {plan.legend.map((item) => (
-            <li key={item.kind} className={`flex items-center gap-2 ${item.kind === 'zero' ? 'text-ink-muted' : 'text-ink'}`}>
-              <LegendSwatch kind={item.kind} />
-              {item.text}
-            </li>
-          ))}
-        </ul>
+      <SeriesSelector series={series} selected={selected.key} onSelect={(s) => onSelect({ key: s.key, name: formatSeriesName(s) })} />
+      {hasOutput ? (
+        <TrendChart series={shown} period={period} asOf={asOf} />
+      ) : (
+        <p role="note" className="flex min-h-[10rem] flex-1 items-center justify-center rounded-control bg-raised/60 px-6 text-center text-panel font-semibold text-ink">
+          No {selected.name} production recorded for {projectName} in the {scope}.
+        </p>
       )}
     </Panel>
   );

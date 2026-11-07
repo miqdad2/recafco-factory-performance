@@ -13,11 +13,14 @@ export function formatVolume(value: number, maxDecimals = 1): string {
 const countFormat = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 });
 export const formatCount = (value: number) => countFormat.format(value);
 
-const percentFormat = new Intl.NumberFormat('en-GB', {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-export const formatPercent = (value: number) => `${percentFormat.format(value)}%`;
+const measureFormat = new Intl.NumberFormat('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-/** Whole-number percentage for compact progress figures, e.g. "80%". */
-export const formatWholePercent = (value: number) => `${countFormat.format(value)}%`;
+/** A quantity in its own unit: pieces are whole; m² and m³ always keep one decimal so columns align. */
+export function formatQuantity(value: number, unit: string): string {
+  if (unit === 'pieces') return formatCount(value);
+  return unit === 'm2' || unit === 'm3' ? measureFormat.format(value) : formatVolume(value);
+}
+
+/** Compact chart label: whole numbers, with one decimal only below 10 so small bars stay truthful. */
+export const formatBarValue = (value: number, unit: string) =>
+  unit === 'pieces' || value >= 10 ? formatCount(value) : formatVolume(value);

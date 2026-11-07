@@ -25,7 +25,7 @@ describe('planValueLabels', () => {
   it('labels productive bars with whole counts, never zero-output or future bars', () => {
     const plan = planValueLabels(octoberDays([12, 0, 1305, null, null]), 'weekly', '2026-10-06T00:00:00+03:00', 'pieces');
     expect(plan.texts).toEqual(['12', null, '1,305', null, null]);
-    expect(plan.legend).toEqual([{ kind: 'zero', text: 'No production' }]);
+    expect(plan.legend).toContainEqual({ kind: 'zero', text: 'No production' });
   });
 
   it('emphasises the day containing the demo reference time in Weekly and calls it "Selected day"', () => {
@@ -66,6 +66,25 @@ describe('planValueLabels', () => {
     expect(plan.legend).toEqual([{ kind: 'note', text: 'Highest day: Fri 2 Oct · 200 pieces' }]);
   });
 
+  it('formats quantities in their own unit and never as pieces', () => {
+    const plan = planValueLabels(octoberDays([120.4, 7.26, null]), 'monthly', AS_OF, 'm2');
+    expect(plan.texts).toEqual(['120', null, null]);
+    expect(plan.legend).toContainEqual({ kind: 'note', text: 'Highest day: Thu 1 Oct · 120.4 m²' });
+    const small = planValueLabels(octoberDays([7.26, 0]), 'weekly', AS_OF, 'm3');
+    expect(small.texts).toEqual(['7.3', null]);
+  });
+
+  it('states when hourly detail is unavailable and labels the day total like the card', () => {
+    const bar: ChartBucket[] = [{ start: '2026-10-14T00:00:00+03:00', end: '2026-10-15T00:00:00+03:00', value: 1234.56 }];
+    const plan = planValueLabels(bar, 'daily', AS_OF, 'm2', true);
+    expect(plan.texts).toEqual(['1,234.6']);
+    expect(plan.legend).toEqual([
+      { kind: 'status', text: 'Hourly detail unavailable' },
+      { kind: 'emphasis', text: 'Selected day, to 2:00 PM' },
+    ]);
+    expect(JSON.stringify(plan)).not.toMatch(/Current hour/);
+  });
+
   it('emphasises the current month in Yearly with a month-to-date description', () => {
     const months: ChartBucket[] = Array.from({ length: 12 }, (_, i) => ({
       start: `2026-${String(i + 1).padStart(2, '0')}-01T00:00:00+03:00`,
@@ -75,6 +94,30 @@ describe('planValueLabels', () => {
     const plan = planValueLabels(months, 'yearly', AS_OF, 'pieces');
     expect(plan.emphasisIndex).toBe(9);
     expect(plan.texts[0]).toBe('1,800');
-    expect(plan.legend).toEqual([{ kind: 'emphasis', text: 'October 2026, to Wed 14 Oct' }]);
+    expect(plan.legend).toEqual([
+      { kind: 'emphasis', text: 'October 2026, to Wed 14 Oct' },
+      { kind: 'note', text: 'Shaded area: not yet reached' },
+    ]);
+  });
+});
+
+describe('future-interval wording', () => {
+  it('names the shaded area for the period, from the reference time in the data', () => {
+    const futureHours = hours([...Array(22).fill(3), null, null]);
+    expect(planValueLabels(futureHours, 'daily', '2026-10-14T21:30:00+03:00', 'm2').legend).toContainEqual({ kind: 'note', text: 'Shaded area: later hours' });
+    const futureDays = octoberDays([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, null, null]);
+    expect(planValueLabels(futureDays, 'monthly', '2026-10-26T12:00:00+03:00', 'm2').legend).toContainEqual({ kind: 'note', text: 'Shaded area: not yet reached' });
+  });
+
+  it('adds no future wording when no interval is still to come', () => {
+    const done = hours(Array(24).fill(2));
+    const legend = planValueLabels(done, 'daily', '2026-10-15T00:00:00+03:00', 'm2').legend;
+    expect(legend.some((l) => /later hours|not yet reached/i.test(l.text))).toBe(false);
+  });
+
+  it('distinguishes elapsed zero hours from later hours', () => {
+    const legend = planValueLabels(hours([0, 0, ...Array(20).fill(3), null, null]), 'daily', '2026-10-14T21:30:00+03:00', 'm2').legend;
+    expect(legend).toContainEqual({ kind: 'zero', text: 'No production' });
+    expect(legend).toContainEqual({ kind: 'note', text: 'Shaded area: later hours' });
   });
 });

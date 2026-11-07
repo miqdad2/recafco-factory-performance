@@ -9,7 +9,7 @@ Design/functionality approval is the milestone before connecting real SAP data.
 ## Units
 1. Scaffold and theme: React, TypeScript, Vite, package scripts, layout tokens and static dashboard composition.
 2. Demo model: schemas, dated fixtures, timezone periods, coherent aggregation and asynchronous in-browser demo provider.
-3. Interactive overview: period controls, KPI cards, trend, capacity, grade mix and projects.
+3. Interactive overview: period and project controls, KPI cards, trend, concrete output and project summary.
 4. Display resilience: clock, fullscreen, refresh, loading/empty/delayed/recovery states.
 5. Review: display scaling, calculation checks, long-session checks, management review package.
 6. After approval: SAP source audit and connector proof of concept.
@@ -19,7 +19,7 @@ Units may overlap visually but must remain reviewable. Do not build a NestJS bac
 
 ## Missing requirements
 Record unresolved questions in the tracker.
-Use explicit reversible demo assumptions for week start, sample capacity and project labels.
+Use explicit reversible demo assumptions for week start and sample records.
 Ask before locking business definitions that could misrepresent factory performance.
 An unresolved SAP mapping does not block synthetic demo design.
 Do not claim a design, business definition or name was approved without evidence.
@@ -27,7 +27,7 @@ Do not claim a design, business definition or name was approved without evidence
 ## Scope discipline
 Do not add finance, HR, maintenance, order-entry or administration screens.
 Do not introduce OEE/quality/scrap simply because they appear in a reference.
-Keep the capacity panel monthly and orders current unless the user changes the specification.
+Keep orders current unless the user changes the specification.
 Split UI work from live connector/deployment work.
 Do not deploy or access SAP as a side effect of scaffolding.
 

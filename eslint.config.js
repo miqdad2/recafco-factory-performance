@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // .agents holds separately installed assistant skills, not application code.
+  globalIgnores(['dist', '.agents']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

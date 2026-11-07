@@ -2,6 +2,8 @@ import type { DashboardSnapshot, Period } from './contracts';
 
 export interface SnapshotRequest {
   period: Period;
+  /** ALL_PROJECTS, UNASSIGNED_PROJECT or a project code. */
+  project: string;
 }
 
 /**

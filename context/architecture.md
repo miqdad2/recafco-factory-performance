@@ -7,7 +7,7 @@
 | Build tool | Vite | Development server and static production assets |
 | Styling | Tailwind CSS + CSS variables | Large-screen layout and tokens |
 | Controls | Selected shadcn/ui components | Accessible period and fullscreen controls |
-| Charts | Apache ECharts | Production trend (ECharts); capacity gauge and product bars are SVG/HTML |
+| Charts | Apache ECharts | Production trend |
 | Client data | TanStack Query | Cached snapshots, refresh and retries |
 | Validation | Zod | Validate period requests and provider responses |
 | Future backend | NestJS | SAP access, scheduled collection and KPI aggregation |
@@ -22,11 +22,15 @@ Additional implemented paths:
 - `src/hooks/`: clock and root font size.
 - `src/lib/time.ts`: Asia/Kuwait display formatting.
 - `src/lib/format.ts`: number formatting.
-- `src/lib/dashboard/units.ts`: litre-based volume summing.
+- `src/lib/dashboard/units.ts`: summing in whole thousandths; never converts units.
+- `src/lib/dashboard/productMapping.ts`: item eligibility, product and unit rules, row order.
+- `src/lib/dashboard/projects.ts`: project attribution and options.
+- `src/features/dashboard/projectSummaryPages.ts`: Project Summary paging from measured row heights.
+- `src/features/dashboard/chartSeries.ts`: the product-and-unit choice shared by the chart and Project Summary.
 - `src/lib/dashboard/errors.ts` and `validate.ts`: typed errors and Zod parsing.
 - `src/lib/dashboard/providers/index.ts`: selects the active provider.
 - `src/lib/dashboard/fixtures/{catalog,generate,random}.ts` and `README.md`: seeded demo records and their assumptions.
-- `src/features/dashboard/usePeriodSelection.ts`: requested versus displayed period, commit on validated success (Unit 3).
+- `src/features/dashboard/useDashboardSelection.ts`: requested versus displayed period and project, commit on validated success.
 - `src/features/dashboard/snapshotQuery.ts`: query keys, options and the shared QueryClient defaults.
 - `src/features/dashboard/dataProvider.ts`: React context for the active provider (tests inject a controllable one).
 - `src/features/dashboard/chartLabels.ts`: which trend bars carry value labels, and the Monthly highlights.
@@ -46,7 +50,7 @@ Do not introduce an integration backend, database, Redis or MinIO merely to disp
 - `src/lib/dashboard/aggregate.ts`: pure metric calculations.
 - `src/lib/dashboard/provider.ts`: provider interface/factory.
 - `src/lib/dashboard/providers/demo.ts`: deterministic demo provider.
-- `src/lib/dashboard/fixtures/`: dated transactions, orders, capacity and projects.
+- `src/lib/dashboard/fixtures/`: dated transactions, items and orders.
 - `src/styles/`: theme tokens and display scaling.
 - `public/brand/`: locally available approved brand files.
 - `context/`: these project specifications.
@@ -62,31 +66,34 @@ A snapshot contains:
 - selectedPeriod and range start/end/timeZone/bucket granularity.
 - sourceDataAsOf and fetchedAt as separate timestamps.
 - current order counts and their snapshot timestamp.
-- produced-elements total (whole pieces), trend buckets and per-product breakdown (Hollowcore, Precast, GRC).
-- delivered output total and explicit unit.
-- monthly capacity month, planned capacity, actual output, remaining volume and percentage.
-- selected project names/codes, percentage and calculation basis.
+- `selectedProject` and `projectOptions`.
+- `output.rows`: one row per product and unit in the project scope, with produced and delivered quantities. The only source for the two quantity cards.
+- `output.productionSeries`: one chart series per row.
+- `output.deliveryDocumentCount`: a separate measure.
+- `projectSummary`: period activity by project, product and unit; validated to add up to `output.rows`. The panel shows the rows for the chart's selected product and unit.
+- `concrete`: selected-period and reference-month-to-date m³, always `all-projects`.
 - section availability/status for partial data failures where appropriate (not yet implemented).
 
-Implemented in Unit 2 (`src/lib/dashboard/contracts.ts`):
+Implemented in `src/lib/dashboard/contracts.ts` (fields and rules: `docs/data-definitions.md`):
 - `range` is the full calendar period [start, end). Data runs only to `sourceDataAsOf`.
-- Trend buckets carry `start`, `end` and `pieces` (whole completed elements). `pieces: null` means not yet reached; `0` means an elapsed interval with no production.
-- `output.delivered` carries `total`, `unit` and a separate `documentCount`.
-- Snapshot validation rejects fractional piece counts, a trend or product breakdown that does not add up to the produced-elements total, a product category listed twice or missing, and a capacity percentage without a known capacity.
-- Finished elements and batching-plant concrete are separate source records (`elementRecords` in pieces, `concreteBatches` in m³). Concrete m³ feeds only Monthly Plant Capacity; element pieces are never derived from m³ (element-production update, 12 Oct 2026).
+- Trend buckets carry `start`, `end` and `quantity`. `quantity: null` means not yet reached; `0` means an elapsed interval with no production.
+- Each series states its actual `granularity` and `hourlyDetail`; date-only Daily data has one day bucket.
+- Unknown figures are `null`, never 0.
+- Snapshot validation rejects a row listed twice, a row key that disagrees with its unit, fractional pieces, a series total that differs from its row and a trend that does not add up. Sums compare whole thousandths, so reconciliation is exact.
+- Batching-plant concrete feeds Concrete Output only; element quantities are never derived from m³.
 - Demo `sourceDataAsOf` is a fixed reference time (Wed 14 Oct 2026, 14:00 Kuwait). `fetchedAt` is when the provider finished loading.
 - Providers reject with `DashboardDataError`, using the codes `invalid-response`, `invalid-source-data`, `aborted` and `unavailable`.
 
 The provider returns a coherent snapshot; presentation does not perform business calculations.
 The demo provider validates synthetic inputs/results in the browser. The later HTTP provider validates API responses; the NestJS API independently validates requests and authorizes access.
-Query key includes the period and any explicit scope such as plant. Implemented as `['dashboard', 'snapshot', { scope, period }]`, where `scope` is the provider's `DashboardDataProvider.scope` (demo: `demo@<reference time>`).
-Period switching (Unit 3): the last successful snapshot stays on screen with its own labels until the requested period's validated snapshot arrives. Obsolete requests are cancelled through their AbortSignal, and a failed request leaves the displayed snapshot unchanged.
+Query key includes the period and any explicit scope such as plant. Implemented as `['dashboard', 'snapshot', { scope, period, project }]`, where `scope` is the provider's `DashboardDataProvider.scope` (demo: `demo@<reference time>`), so source and reference time are part of every key.
+Period and project switching: the last successful snapshot stays on screen with its own labels until the requested view's validated snapshot arrives. Obsolete requests are cancelled through their AbortSignal, and a failed request leaves the displayed snapshot unchanged.
 Use a proposed 60-second polling interval, bounded retries and one active request per query. Unit 2 loads once with no polling and retries non-validation failures twice; the polling interval arrives in Unit 4.
 Configure visible wallboard background behaviour deliberately; do not assume browser defaults.
 Cancel requests when appropriate and dispose all timers/charts on unmount.
 
 ## Storage
-Demo transactions and capacities live in source-controlled synthetic fixtures bundled with the static frontend.
+Demo transactions live in source-controlled synthetic fixtures bundled with the static frontend.
 Browser storage may persist display preferences only; do not persist SAP credentials or real operational records there.
 Local fonts and brand assets keep the internal display independent of third-party CDNs.
 No database is needed in the demo.
@@ -118,9 +125,9 @@ The dashboard does not create, update or delete SAP records.
 ## Invariants
 1. Demo remains clearly identified as demo.
 2. One snapshot drives related cards/charts; totals reconcile.
-3. Units never silently change or combine.
-4. Period activity and current snapshots are distinct.
-5. Capacity is explicit, configured and never fabricated from past output.
+3. Units never silently change or combine; quantities are grouped by product and unit.
+4. Period activity and current snapshots are distinct. Project scope applies to both; concrete is never project-scoped.
+5. Capacity, targets and completion percentages are not shown until defined; undefined SAP report fields are never interpreted as them.
 6. Failures retain last valid data and its actual timestamp; a failed fetch never advances sourceDataAsOf.
 7. No live credentials or operational data enter client fixtures or public repositories.
 8. Long-running display resources are bounded and cleaned up.

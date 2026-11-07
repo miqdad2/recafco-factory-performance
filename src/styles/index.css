@@ -66,8 +66,8 @@
   --text-kpi--line-height: 1;
   --text-kpi-long: 4rem; /* 64px for long values such as "66,197.9" */
   --text-kpi-long--line-height: 1;
-  --text-capacity: 4.5rem; /* 72px capacity percentage */
-  --text-capacity--line-height: 1;
+  --text-row: 2rem; /* 32px product-row quantities */
+  --text-row--line-height: 1.15;
   --text-panel: 1.625rem; /* 26px card/panel titles */
   --text-panel--line-height: 1.2;
   --text-label: 1.375rem; /* 22px chart labels, project names, period buttons */
